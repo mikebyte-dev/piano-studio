@@ -16,9 +16,9 @@
 
 ## 🧭 Decisiones técnicas ya tomadas
 
-- **MIDI nativo en Android:** se usará `android.media.midi.MidiManager` a través de un **módulo Expo propio**, construido en el proyecto separado `expo-midi`. No existe un módulo MIDI oficial de Expo. La librería candidata `react-native-midi-api` v0.2.0 **queda descartada como dependencia** (repo público inexistente, un solo mantenedor, sin canal de soporte); su código **MIT** queda como **base opcional a decidir** (partir de él vs. escribir desde cero).
+- **MIDI nativo en Android:** se usará `android.media.midi.MidiManager` a través de un **módulo Expo propio**, construido en el proyecto separado `midi-android`. No existe un módulo MIDI oficial de Expo. La librería candidata `react-native-midi-api` v0.2.0 **queda descartada como dependencia** (repo público inexistente, un solo mantenedor, sin canal de soporte); su código **MIT** queda como **base opcional a decidir** (partir de él vs. escribir desde cero).
   - Librerías descartadas: `react-native-midi` (abandonada, sin licencia, último release 2021); `react-native-midi-device` y `react-native-usb-midi` (no existen en npm); `@motiz88/react-native-midi` (WIP desde 2023).
-- **La capa MIDI se valida en un proyecto satélite, no en este repo:** no se compromete la arquitectura a una librería sin validarla. Proyecto satélite independiente: `D:\Programming\Projects\expo-midi` (nombre provisional), con plan propio ya escrito. Secuencia acordada: **validar → construir el módulo propio → importarlo**. Decisión ya resuelta: **se escribe un módulo MIDI propio** con todo lo requerido. Intención: publicar un módulo MIDI open source como aporte a la comunidad.
+- **La capa MIDI se valida en un proyecto satélite, no en este repo:** no se compromete la arquitectura a una librería sin validarla. Proyecto satélite independiente: `D:\Programming\Projects\midi-android` (nombre definitivo), con plan propio ya escrito. Secuencia acordada: **validar → construir el módulo propio → importarlo**. Decisión ya resuelta: **se escribe un módulo MIDI propio** con todo lo requerido. Intención: publicar un módulo MIDI open source como aporte a la comunidad.
 - **El módulo propio se importa desde el proyecto satélite sin tocar núcleo ni UI:** la capa MIDI real se importará a esta app cuando exista, **detrás de la interfaz de adaptador**; solo se sustituye la implementación falsa por la real. Gracias a eso, esta app **no depende** de que el satélite exista para avanzar. La vinculación local durante el desarrollo sigue **sin validar** (es la tarea de integración del plan).
 - **Desacople obligatorio (principio de arquitectura, no una tarea):** la app se construye contra una **interfaz de adaptador MIDI** (entrada/salida) con una **implementación falsa/simulada**. El núcleo de dominio, el motor de grabación y toda la UI deben poder desarrollarse y testearse **hoy**, sin hardware y sin esperar el resultado del proyecto satélite. La librería MIDI real se conecta después, detrás de esa interfaz.
 - **MIDI no funciona en Expo Go** → se trabaja con **development build**. Implica Android SDK/Android Studio y ciclos de compilación nativa.
@@ -45,10 +45,12 @@
 
 ### 🔴 En Progreso
 
-Son **dos tareas paralelas e independientes**: no se bloquean entre sí y pueden ejecutarse a la vez (`@buddy` puede tomar una mientras la otra espera hardware o tiempos de build). La 0A ocurre en el proyecto satélite; la 0B, en este repo.
+Las dos tareas **no se bloquean entre sí** y pueden ejecutarse a la vez (`@buddy` puede tomar una mientras la otra espera hardware o tiempos de build), pero **por decisión del usuario la Fase 0A tiene prioridad sobre la Fase 0B**: **primero el recorrido de punta a punta con hardware real (piano → visualizador), después la infraestructura de pruebas sin hardware**.
 
-- [ ] **Fase 0A — Spike de viabilidad MIDI (en el proyecto satélite `expo-midi`)**
-  - **Asignación:** `@buddy` (implementación) con validación de `@tester`. El detalle completo vive en `D:\Programming\Projects\expo-midi\plan.md`.
+La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\Programming\Projects\midi-android`, cuyo plan es la referencia; la **Fase 0B ocurre en este repo**.
+
+- [ ] **Fase 0A — Spike de viabilidad MIDI (en el proyecto satélite `midi-android`)** — **prioritaria**
+  - **Asignación:** `@buddy` (implementación) con validación de `@tester`. El detalle completo vive en `D:\Programming\Projects\midi-android\plan.md`.
   - **Objetivo:** decidir la capa MIDI real antes de construir encima, con evidencia y no con suposiciones.
   - **Tareas internas:**
     1. (✅) Comprobar si la librería candidata `react-native-midi-api@0.2.0` tiene repositorio público → **resultado: no hay repositorio público; queda descartada como dependencia**.
@@ -62,7 +64,8 @@ Son **dos tareas paralelas e independientes**: no se bloquean entre sí y pueden
     9. (pendiente) Registrar la decisión final con su evidencia.
   - **Criterio de aceptación:** informe con datos concretos (compila sí/no con SDK 57, eventos capturados, jitter p50/p95, comportamiento ante desconexión) y la decisión sobre el punto de partida del módulo registrada, con alternativas descartadas y motivo.
 
-- [ ] **Fase 0B — Infraestructura de tests + núcleo de dominio + adaptador MIDI falso (en este repo, sin hardware)**
+- [ ] **Fase 0B — Infraestructura de tests + núcleo de dominio + adaptador MIDI falso (en este repo, sin hardware)** — **segunda prioridad**
+  - **Arranca después de que el recorrido real con hardware (piano → visualizador) esté verificado**, no antes. No está cancelada: sigue siendo necesaria, y sigue siendo el desbloqueo para poder trabajar sin hardware.
   - **Asignación:** `@buddy` (implementación) con revisión de `@tester`.
   - **Objetivo:** poder desarrollar y testear el núcleo y la UI hoy, sin hardware y sin esperar a la Fase 0A.
   - **Tareas internas:**
@@ -70,6 +73,10 @@ Son **dos tareas paralelas e independientes**: no se bloquean entre sí y pueden
     2. Definir el modelo: proyecto, pista, toma/región, nota con pitch/velocity/ticks/duración, PPQ y tempo.
     3. Definir la **interfaz del adaptador MIDI** (entrada/salida) y su **implementación falsa/simulada**: entrada simulada/scriptada para tests y para desarrollar la UI sin hardware.
   - **Criterio de aceptación:** `npx tsc --noEmit`, `npx expo lint` y los tests en verde, con los tests escritos **antes** de la implementación a partir de la especificación.
+
+**Criterio de integración del módulo MIDI:** el módulo del satélite se trae a esta app cuando se cumplan **dos condiciones**: (1) entregue **nota + velocidad + timestamp nativo** en la tablet y libere todo al desconectar, sin notas colgadas; y (2) existan la **interfaz del adaptador MIDI** y su **implementación falsa**, con el núcleo de grabación probado contra ella. Por eso el módulo **no necesita estar publicado ni "servible"** para integrarse.
+
+**Riesgo sin validar:** la vinculación de un módulo local entre dos repos (dependencia `file:`, dependencia git o módulo local de Expo). Probarla temprano **con un stub**, no el día que se necesite el piano; alternativa de emergencia: `npm pack` → tarball → dependencia `file:`.
 
 ### 🟡 Próximas Tareas (Orden Recomendado)
 
@@ -108,9 +115,9 @@ Son **dos tareas paralelas e independientes**: no se bloquean entre sí y pueden
 1. **Punto de partida del módulo MIDI propio.** ¿Se escribe **desde cero** o se **parte del código MIT publicado** en el tarball de `react-native-midi-api@0.2.0`? Consecuencias: partir del código MIT acelera y reutiliza lógica ya probada contra SDK 56, pero arrastra deuda de una base no validada en SDK 57 / RN 0.86.3 y exige respetar licencia y atribución; escribir desde cero da control total y parte del stack objetivo, pero cuesta más tiempo.
 2. **Formato de exportación/importación.** ¿Standard MIDI File (`.mid`) interoperable, o formato propio en JSON (más simple, menos útil fuera de la app)?
 3. **Publicación del paquete satélite.** ¿Se publica abierto en npm como aporte a la comunidad, o queda privado para consumo propio?
-4. **Nombre del paquete satélite.** Sigue pendiente el nombre definitivo (el prefijo `expo-` en un paquete no oficial es mal visto en la comunidad).
+4. **Nombre del paquete satélite — RESUELTO:** el nombre definitivo del paquete, el repositorio y la carpeta es **`midi-android`**.
 
 ## 📌 Contexto de Continuación (Para reanudar el chat)
 
-- **Último punto de control:** plan actualizado; Fase 0A con su investigación resuelta (librería descartada, vía USB MIDI confirmada) y Fase 0B sin empezar. Sin código de producto todavía. Nota: los commits ya están hechos en ambos repos.
-- **Siguiente paso exacto:** arrancar la **Fase 0B** en este repo (infraestructura de tests con `jest-expo` + `@testing-library/react-native`, núcleo de dominio y adaptador MIDI falso), que **no depende del hardware ni del proyecto satélite**; en paralelo, resolver en el satélite la decisión del punto de partida del módulo.
+- **Último punto de control:** plan del satélite reordenado alrededor del objetivo "piano real → visualizador"; el usuario lo ejecuta en otra sesión y lo sube a su GitHub. En este repo, Fase 0A con su investigación resuelta (librería descartada, vía USB MIDI confirmada) y Fase 0B sin empezar, en segundo lugar. Sin código de producto todavía. Nota: los commits ya están hechos en ambos repos.
+- **Siguiente paso exacto:** el recorrido real con hardware (piano → visualizador) en el repositorio satélite `D:\Programming\Projects\midi-android`; mientras tanto, en este repo no se avanza con código nuevo. La Fase 0B arranca después, cuando ese recorrido esté verificado.
