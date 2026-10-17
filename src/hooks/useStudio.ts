@@ -5,7 +5,6 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { Note, Region } from '../core/domain/types';
 import type { MidiAdapter, MidiMessage } from '../core/midi/MidiAdapter';
 import { decodeMessage, noteOffBytes, noteOnBytes } from '../core/midi/messages';
-import { commitOverdub, commitReplace } from '../core/recording/commitModes';
 import { MidiOutPlayer, offsetNotesForPlayback } from '../core/recording/MidiOutPlayer';
 import {
   moveRegion,
@@ -73,20 +72,36 @@ export interface UseStudioResult {
   seek: (tick: number) => void;
   setTempo: (tempo: number) => void;
 
-  // Take (single region)
+  // Takes (multiple independent recordings)
+  /** Every committed take, in recording order. */
+  regions: Region[];
+  /** Id of the region editing actions target; `null` falls back to the last region. */
+  selectedRegionId: string | null;
+  setSelectedRegionId: (id: string | null) => void;
+  /** Backward-compatible alias for the most recently committed region. */
   region: Region | null;
   /** Notes captured by the in-progress take, shown while recording. */
   liveNotes: Note[];
+  /** Every recorded note (all regions flattened) plus the in-progress take. */
+  recordedNotes: Note[];
   clearRegion: () => void;
+  /** Removes the region with the given id; keeps the selection valid. */
+  deleteRegion: (id: string) => void;
 
   // Region editing
   moveRegionBy: (deltaTick: number) => void;
   trimRegionStartBy: (deltaTick: number) => void;
   trimRegionEndBy: (deltaTick: number) => void;
   resizeRegionBy: (deltaTick: number) => void;
+  /** Sets the display color of the region with the given id. */
+  setRegionColor: (id: string, color: string) => void;
 
   /** Plays a note on the open device (MIDI out) with local visual feedback. */
   sendNote: (pitch: number, velocity?: number) => void;
+  /** Presses and sustains a note until `stopNote` (press-in/out keyboard). */
+  startNote: (pitch: number, velocity?: number) => void;
+  /** Releases a note previously pressed with `startNote`. */
+  stopNote: (pitch: number) => void;
 }
 
 function clockNow(): number {
@@ -102,9 +117,31 @@ function union(a: Set<number>, b: Set<number>): Set<number> {
 }
 
 /**
- * Orchestrates MIDI I/O, the transport clock, live recording (overdub/replace),
- * playback over MIDI out and region editing. Composes `useMidi` (device + live
- * note state) with the pure core modules.
+ * Applies `updater` to the selected region (or the last one when nothing is
+ * selected / the id is unknown), returning a new array. Pure.
+ */
+function mapSelectedRegion(
+  regions: Region[],
+  selectedRegionId: string | null,
+  updater: (region: Region) => Region,
+): Region[] {
+  if (regions.length === 0) return regions;
+  const found = selectedRegionId === null ? -1 : regions.findIndex((r) => r.id === selectedRegionId);
+  const target = found === -1 ? regions.length - 1 : found;
+  const next = [...regions];
+  next[target] = updater(regions[target]);
+  return next;
+}
+
+/**
+ * Orchestrates MIDI I/O, the transport clock, live recording, playback over
+ * MIDI out and region editing. Composes `useMidi` (device + live note state)
+ * with the pure core modules.
+ *
+ * Each finished take is committed as an independent `Region` (empty takes
+ * create no region); editing actions target the selected region, defaulting to
+ * the most recent one. `recordMode` is still surfaced for the UI but takes are
+ * no longer merged.
  *
  * Note: the metronome has no audio engine — it exposes a beat counter the UI can
  * pulse. Off by default.
@@ -123,7 +160,8 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const [timeSignature, setTimeSignatureState] = useState(4);
   const [recordingColor, setRecordingColor] = useState('#22c55e');
   const [recordMode, setRecordMode] = useState<RecordMode>('overdub');
-  const [region, setRegion] = useState<Region | null>(null);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [liveNotes, setLiveNotes] = useState<Note[]>([]);
   const [localPressed, setLocalPressed] = useState<Set<number>>(() => new Set());
 
@@ -132,17 +170,14 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
 
   const anchorRef = useRef<{ ms: number; tick: number } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
-  const regionRef = useRef<Region | null>(null);
-  const recordModeRef = useRef<RecordMode>(recordMode);
+  const regionsRef = useRef<Region[]>([]);
+  const regionCounterRef = useRef(0);
   const recordingColorRef = useRef<string>(recordingColor);
   const sendMessageRef = useRef(midi.sendMessage);
 
   useEffect(() => {
-    regionRef.current = region;
-  }, [region]);
-  useEffect(() => {
-    recordModeRef.current = recordMode;
-  }, [recordMode]);
+    regionsRef.current = regions;
+  }, [regions]);
   useEffect(() => {
     recordingColorRef.current = recordingColor;
   }, [recordingColor]);
@@ -209,37 +244,33 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   }, [transportState, transport]);
 
   const commitTake = useCallback((incoming: Note[], rangeStart: number, rangeEnd: number) => {
+    // An empty take creates no region (and therefore no empty track).
+    if (incoming.length === 0) return;
+    void rangeStart; // multiple independent takes: no merge range needed
     const color = recordingColorRef.current;
     const tagged = incoming.map((n) => (n.color ? n : { ...n, color }));
-    setRegion((prev) => {
-      const existing = prev?.notes ?? [];
-      const notes =
-        recordModeRef.current === 'replace'
-          ? commitReplace(existing, tagged, rangeStart, rangeEnd)
-          : commitOverdub(existing, tagged);
-      const maxEnd = notes.reduce((acc, n) => Math.max(acc, n.startTick + n.durationTick), 0);
-      return {
-        id: prev?.id ?? 'region-1',
-        trackId: prev?.trackId ?? 'track-1',
-        startTick: 0,
-        lengthTick: Math.max(1, maxEnd, rangeEnd),
-        notes,
-      };
-    });
+    const maxEnd = tagged.reduce((acc, n) => Math.max(acc, n.startTick + n.durationTick), 0);
+    regionCounterRef.current += 1;
+    const index = regionCounterRef.current;
+    const region: Region = {
+      id: `region-${index}`,
+      trackId: `track-${index}`,
+      startTick: 0,
+      lengthTick: Math.max(1, maxEnd, rangeEnd),
+      notes: tagged,
+      color,
+    };
+    setRegions((prev) => [...prev, region]);
+    setSelectedRegionId(region.id);
   }, []);
 
   const play = useCallback(() => {
     const t = transport;
     // Play always starts from the beginning of the recorded take.
     t.seek(0);
-    const current = regionRef.current;
-    if (current !== null) {
-      player.schedule(
-        offsetNotesForPlayback(current.notes, 0),
-        t.tempo,
-        t.ppq,
-        sendVia,
-      );
+    const notes = regionsRef.current.flatMap((region) => region.notes);
+    if (notes.length > 0) {
+      player.schedule(offsetNotesForPlayback(notes, 0), t.tempo, t.ppq, sendVia);
     }
     t.play();
     reanchor();
@@ -288,9 +319,9 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       t.seek(tick);
       if (t.isPlaying) {
         player.cancel();
-        const current = regionRef.current;
-        if (current !== null) {
-          player.schedule(offsetNotesForPlayback(current.notes, t.position), t.tempo, t.ppq, sendVia);
+        const notes = regionsRef.current.flatMap((region) => region.notes);
+        if (notes.length > 0) {
+          player.schedule(offsetNotesForPlayback(notes, t.position), t.tempo, t.ppq, sendVia);
         }
       }
       reanchor();
@@ -322,23 +353,63 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   }, []);
 
   const clearRegion = useCallback(() => {
-    setRegion(null);
-  }, []);
+    setRegions((prev) => {
+      if (prev.length === 0) return prev;
+      const found = selectedRegionId === null ? -1 : prev.findIndex((r) => r.id === selectedRegionId);
+      const target = found === -1 ? prev.length - 1 : found;
+      return prev.filter((_, i) => i !== target);
+    });
+    setSelectedRegionId(null);
+  }, [selectedRegionId]);
 
-  const moveRegionBy = useCallback((deltaTick: number) => {
-    setRegion((prev) => (prev === null ? prev : moveRegion(prev, deltaTick)));
-  }, []);
+  const deleteRegion = useCallback(
+    (id: string) => {
+      const remaining = regions.filter((region) => region.id !== id);
+      setRegions(remaining);
+      if (selectedRegionId === id) {
+        setSelectedRegionId(remaining.length > 0 ? remaining[remaining.length - 1].id : null);
+      }
+    },
+    [regions, selectedRegionId],
+  );
 
-  const trimRegionStartBy = useCallback((deltaTick: number) => {
-    setRegion((prev) => (prev === null ? prev : trimRegionStart(prev, prev.startTick + deltaTick)));
-  }, []);
+  const moveRegionBy = useCallback(
+    (deltaTick: number) => {
+      setRegions((prev) => mapSelectedRegion(prev, selectedRegionId, (r) => moveRegion(r, deltaTick)));
+    },
+    [selectedRegionId],
+  );
 
-  const trimRegionEndBy = useCallback((deltaTick: number) => {
-    setRegion((prev) => (prev === null ? prev : trimRegionEnd(prev, regionEndTick(prev) + deltaTick)));
-  }, []);
+  const trimRegionStartBy = useCallback(
+    (deltaTick: number) => {
+      setRegions((prev) =>
+        mapSelectedRegion(prev, selectedRegionId, (r) => trimRegionStart(r, r.startTick + deltaTick)),
+      );
+    },
+    [selectedRegionId],
+  );
 
-  const resizeRegionBy = useCallback((deltaTick: number) => {
-    setRegion((prev) => (prev === null ? prev : resizeRegion(prev, prev.lengthTick + deltaTick)));
+  const trimRegionEndBy = useCallback(
+    (deltaTick: number) => {
+      setRegions((prev) =>
+        mapSelectedRegion(prev, selectedRegionId, (r) => trimRegionEnd(r, regionEndTick(r) + deltaTick)),
+      );
+    },
+    [selectedRegionId],
+  );
+
+  const resizeRegionBy = useCallback(
+    (deltaTick: number) => {
+      setRegions((prev) =>
+        mapSelectedRegion(prev, selectedRegionId, (r) => resizeRegion(r, r.lengthTick + deltaTick)),
+      );
+    },
+    [selectedRegionId],
+  );
+
+  /** Sets the display color of the region with the given id. */
+  const setRegionColor = useCallback((id: string, color: string) => {
+    setRegions((prev) => prev.map((region) => (region.id === id ? { ...region, color } : region)));
   }, []);
 
   const tapTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
@@ -349,6 +420,13 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       const existing = tapTimersRef.current.get(pitch);
       if (existing) clearTimeout(existing);
       sendVia(noteOnBytes(pitch, velocity));
+      // Feed the active recording session so mouse/screen taps are captured.
+      // `sessionRef` is null unless a recording is in progress, so notes played
+      // before pressing RECORD are never captured.
+      const session = sessionRef.current;
+      if (session !== null) {
+        session.onNoteOn(pitch, velocity, currentTick(), recordingColorRef.current);
+      }
       setLocalPressed((prev) => {
         const next = new Set(prev);
         next.add(pitch);
@@ -356,6 +434,10 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       });
       const timer = setTimeout(() => {
         sendVia(noteOffBytes(pitch));
+        const activeSession = sessionRef.current;
+        if (activeSession !== null) {
+          activeSession.onNoteOff(pitch, currentTick());
+        }
         setLocalPressed((prev) => {
           if (!prev.has(pitch)) return prev;
           const next = new Set(prev);
@@ -366,7 +448,57 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       }, TAP_DURATION_MS);
       tapTimersRef.current.set(pitch, timer);
     },
-    [sendVia],
+    [currentTick, sendVia],
+  );
+
+  /**
+   * Presses a note and sustains it until `stopNote` is called (press-in/out on
+   * the on-screen keyboard). Feeds the active recording session while recording.
+   */
+  const startNote = useCallback(
+    (pitch: number, velocity: number = DEFAULT_VELOCITY) => {
+      // A sustained press supersedes any pending auto-release tap for this pitch.
+      const existing = tapTimersRef.current.get(pitch);
+      if (existing) {
+        clearTimeout(existing);
+        tapTimersRef.current.delete(pitch);
+      }
+      sendVia(noteOnBytes(pitch, velocity));
+      const session = sessionRef.current;
+      if (session !== null) {
+        session.onNoteOn(pitch, velocity, currentTick(), recordingColorRef.current);
+      }
+      setLocalPressed((prev) => {
+        if (prev.has(pitch)) return prev;
+        const next = new Set(prev);
+        next.add(pitch);
+        return next;
+      });
+    },
+    [currentTick, sendVia],
+  );
+
+  /** Releases a note previously pressed with `startNote`. */
+  const stopNote = useCallback(
+    (pitch: number) => {
+      const existing = tapTimersRef.current.get(pitch);
+      if (existing) {
+        clearTimeout(existing);
+        tapTimersRef.current.delete(pitch);
+      }
+      sendVia(noteOffBytes(pitch));
+      const session = sessionRef.current;
+      if (session !== null) {
+        session.onNoteOff(pitch, currentTick());
+      }
+      setLocalPressed((prev) => {
+        if (!prev.has(pitch)) return prev;
+        const next = new Set(prev);
+        next.delete(pitch);
+        return next;
+      });
+    },
+    [currentTick, sendVia],
   );
 
   // Clear pending on-screen tap timers on unmount to avoid stuck notes.
@@ -418,6 +550,18 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     [midi.activeNotes, localPressed],
   );
 
+  /** All recorded notes across every take, plus the in-progress take. */
+  const recordedNotes = useMemo(
+    () => [
+      ...regions.flatMap((region) => region.notes.map((n) => ({ ...n, color: region.color ?? n.color }))),
+      ...liveNotes,
+    ],
+    [regions, liveNotes],
+  );
+
+  /** Backward-compatible alias: the most recently committed region. */
+  const region = regions.length > 0 ? regions[regions.length - 1] : null;
+
   const beat = Math.floor(position / transport.ppq) + 1;
 
   return {
@@ -457,14 +601,22 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     setTempo,
 
     region,
+    regions,
+    selectedRegionId,
+    setSelectedRegionId,
     liveNotes,
+    recordedNotes,
     clearRegion,
+    deleteRegion,
 
     moveRegionBy,
     trimRegionStartBy,
     trimRegionEndBy,
     resizeRegionBy,
+    setRegionColor,
 
     sendNote,
+    startNote,
+    stopNote,
   };
 }

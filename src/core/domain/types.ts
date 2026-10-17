@@ -16,6 +16,8 @@ export interface Region {
   startTick: number;
   lengthTick: number;
   notes: Note[];
+  /** Optional display color (hex) of the take/track. */
+  color?: string;
 }
 
 export interface Track {
@@ -24,6 +26,16 @@ export interface Track {
   regions: Region[];
   muted: boolean;
   solo: boolean;
+  /** Optional display color (hex). */
+  color?: string;
+  /** Optional identifier of the MIDI input device this track is bound to. */
+  inputDeviceId?: string;
+  /** Optional MIDI channel (0-15). */
+  channel?: number;
+  /** Optional track start position in ticks. */
+  startTimeTick?: number;
+  /** Optional track duration in ticks. */
+  durationTick?: number;
 }
 
 export interface Project {

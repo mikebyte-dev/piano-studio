@@ -6,12 +6,25 @@ import { PianoKeyboard } from '../components/PianoKeyboard';
 import { Waterfall } from '../components/Waterfall';
 import { useStudio } from '../hooks/useStudio';
 
+/** Preset palette for per-track color picking. */
+const TRACK_COLORS = [
+  '#22c55e',
+  '#3b82f6',
+  '#ef4444',
+  '#eab308',
+  '#a855f7',
+  '#ec4899',
+  '#14b8a6',
+  '#f97316',
+] as const;
+
 
 
 export default function Index() {
   const studio = useStudio();
   const { devices, isOpen, connect } = studio;
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const [paletteRegionId, setPaletteRegionId] = useState<string | null>(null);
   const autoConnectedRef = useRef(false);
 
   // Auto-connect when a single device is available.
@@ -24,29 +37,10 @@ export default function Index() {
     if (devices.length === 0) autoConnectedRef.current = false;
   }, [devices, isOpen, connect]);
 
-  const recordedNotes = [...(studio.region?.notes ?? []), ...studio.liveNotes];
-
-  // Computer-keyboard input for the central octave (testing). Chromatic C4..B4.
-  const { sendNote } = studio;
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const map: Record<string, number> = {
-      a: 60, w: 61, r: 62, f: 63, s: 64, n: 65,
-      l: 66, e: 67, u: 68, i: 69, y: 70, o: 71,
-    };
-    const handler = (event: KeyboardEvent) => {
-      const pitch = map[event.key.toLowerCase()];
-      if (pitch === undefined) return;
-      if (event.repeat) return;
-      event.preventDefault();
-      sendNote(pitch);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [sendNote]);
+  const recordedNotes = studio.recordedNotes;
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-950">
+    <SafeAreaView className="flex-1 bg-zinc-900">
       {/* Top transport bar */}
       <View className="flex-row flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2">
         <Text className="mr-2 text-lg font-bold text-white">Piano Studio</Text>
@@ -130,17 +124,67 @@ export default function Index() {
         {studio.error ? <Text className="text-xs text-red-400">{studio.error}</Text> : null}
       </View>
 
-      {/* Recorded track */}
-      {studio.region ? (
-        <View className="flex-row items-center gap-2 px-3 py-1">
-          <View
-            style={{ backgroundColor: studio.region.notes[0]?.color ?? '#22c55e' }}
-            className="h-4 w-4 rounded"
-          />
-          <Text className="text-xs text-zinc-300">Track 1 · {studio.region.notes.length} notes</Text>
-          <Pressable onPress={studio.clearRegion} className="ml-auto rounded bg-zinc-800 px-2 py-1">
-            <Text className="text-xs text-white">Clear</Text>
-          </Pressable>
+      {/* Recorded tracks */}
+      {studio.regions.length > 0 ? (
+        <View className="h-11">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerClassName="items-center px-3"
+            className="h-full"
+          >
+            {studio.regions.map((region, i) => {
+              const selected = studio.selectedRegionId === region.id;
+              return (
+                <View
+                  key={region.id}
+                  className={`mr-2 flex-row items-center gap-2 rounded px-2 py-1 ${selected ? 'bg-zinc-700' : 'bg-zinc-900'}`}
+                >
+                  <Pressable
+                    onPress={() => {
+                      studio.setSelectedRegionId(region.id);
+                      setPaletteRegionId((prev) => (prev === region.id ? null : region.id));
+                    }}
+                    className="flex-row items-center gap-2"
+                    accessibilityLabel={`Track ${i + 1} color options`}
+                  >
+                    <View
+                      style={{ backgroundColor: region.color ?? region.notes[0]?.color ?? '#22c55e' }}
+                      className="h-4 w-4 rounded"
+                    />
+                    <Text className="text-xs text-zinc-300">
+                      Track {i + 1} · {region.notes.length} notes
+                    </Text>
+                  </Pressable>
+                  {paletteRegionId === region.id ? (
+                    <View className="flex-row items-center gap-1">
+                      {TRACK_COLORS.map((color) => (
+                        <Pressable
+                          key={color}
+                          onPress={() => {
+                            studio.setRegionColor(region.id, color);
+                            setPaletteRegionId(null);
+                          }}
+                          style={{ backgroundColor: color }}
+                          className="h-3.5 w-3.5 rounded-full border border-zinc-500"
+                          accessibilityLabel={`Set track color ${color}`}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
+                  <Pressable
+                    onPress={() => {
+                      studio.deleteRegion(region.id);
+                      setPaletteRegionId((prev) => (prev === region.id ? null : prev));
+                    }}
+                    className="rounded bg-zinc-800 px-2 py-1"
+                  >
+                    <Text className="text-xs text-white">Delete</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </ScrollView>
         </View>
       ) : null}
 
@@ -157,16 +201,20 @@ export default function Index() {
           width={layout.width}
           height={layout.height}
           activeColor={studio.recordingColor}
-          animate={studio.transportState !== 'stopped' || studio.activeNotes.size > 0 || studio.liveNotes.length > 0}
+          isScrolling={studio.transportState !== 'stopped'}
         />
       </View>
 
-      {/* Piano keyboard (key highlight hidden while recording) */}
+      {/* Red felt strip, like a professional piano */}
+      <View className="h-[3px] w-full bg-red-600" />
+
+      {/* Piano keyboard (keys highlight in every mode) */}
       <View className="h-36">
         <PianoKeyboard
-          activeNotes={studio.transportState === 'recording' ? new Set() : studio.activeNotes}
+          activeNotes={studio.activeNotes}
           sustainedNotes={studio.sustainedNotes}
-          onKeyPress={studio.sendNote}
+          onKeyDown={studio.startNote}
+          onKeyUp={studio.stopNote}
         />
       </View>
 

@@ -14,7 +14,10 @@ export interface PianoKeyboardProps {
   activeNotes: Set<number>;
   /** Pitches held by the sustain pedal. */
   sustainedNotes?: Set<number>;
-  onKeyPress?: (pitch: number) => void;
+  /** Called when a key is pressed in (start of a sustained note). */
+  onKeyDown?: (pitch: number) => void;
+  /** Called when a key is released (end of a sustained note). */
+  onKeyUp?: (pitch: number) => void;
 }
 
 interface BlackKey {
@@ -27,7 +30,7 @@ interface BlackKey {
  * absolutely positioned between them. Pressed and sustained keys are highlighted
  * differently.
  */
-export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyPress }: PianoKeyboardProps) {
+export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyDown, onKeyUp }: PianoKeyboardProps) {
   const [width, setWidth] = useState(0);
 
   const whiteKeyWidth = width > 0 ? width / WHITE_KEY_COUNT : 0;
@@ -73,7 +76,8 @@ export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyPress }: Piano
           return (
             <Pressable
               key={pitch}
-              onPress={() => onKeyPress?.(pitch)}
+              onPressIn={() => onKeyDown?.(pitch)}
+              onPressOut={() => onKeyUp?.(pitch)}
               className={`flex-1 justify-end border-r border-zinc-300 pb-1 ${background}`}
             >
               {pitch % 12 === 0 ? (
@@ -95,7 +99,8 @@ export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyPress }: Piano
         return (
           <Pressable
             key={pitch}
-            onPress={() => onKeyPress?.(pitch)}
+            onPressIn={() => onKeyDown?.(pitch)}
+            onPressOut={() => onKeyUp?.(pitch)}
             style={{ left, width: blackKeyWidth }}
             className={`absolute top-0 h-[60%] rounded-b-sm ${background}`}
           />
