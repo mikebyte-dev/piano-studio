@@ -202,6 +202,7 @@ export default function Index() {
           height={layout.height}
           activeColor={studio.recordingColor}
           isScrolling={studio.transportState !== 'stopped'}
+          tempo={studio.tempo}
         />
       </View>
 

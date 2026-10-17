@@ -8,7 +8,13 @@
  * The contract (flow-clock ticks, `ppq` pulses per quarter):
  *  1. endTick = open ? flowTick : startTick + durationTick
  *  2. bottom  = max(0, ((flowTick - endTick) / ppq) * pxPerQuarter)
- *  3. height  = max(MIN_NOTE_PX, ((endTick - startTick) / ppq) * pxPerQuarter)
+ *  3. height  = max(minHeight, ((endTick - startTick) / ppq) * pxPerQuarter)
+ *     where   minHeight = max(MIN_NOTE_PX, (MIN_NOTE_MS * qps * pxPerQuarter) / 1000)
+ *     and     qps       = (Number.isFinite(quartersPerSecond) && quartersPerSecond > 0)
+ *                           ? quartersPerSecond
+ *                           : DEFAULT_QUARTERS_PER_SECOND
+ *     i.e. a note is never shorter than MIN_NOTE_MS of flow time (100 ms) at the
+ *     current flow speed, nor shorter than MIN_NOTE_PX, whichever is taller.
  *  4. opacity = viewHeight <= 0
  *                 ? 1
  *                 : clamp((viewHeight - bottom) / (viewHeight * FADE_PORTION), 0, 1)
@@ -17,6 +23,12 @@
  *     { bottom: 0, height: MIN_NOTE_PX, opacity: 1, offscreen: false }
  *  7. negative/non-finite `bottom` clamps to 0; `height` is never below MIN_NOTE_PX.
  *
+ * IMPORTANT — the time-based minimum is a DISPLAY-ONLY length floor. It is purely
+ * a rendering concern: it neither alters, derives from, nor feeds back into the
+ * note's stored/sounded duration (`durationTick`, which always records the real
+ * elapsed flow-clock ticks). A visually floored note still sounds and is stored
+ * at its true, unmodified length.
+ *
  * A held (open) note is never pruned: while open, endTick === flowTick, so
  * bottom is always exactly 0 and it can never be offscreen, no matter how long
  * the key is held (it just grows taller than the view).
@@ -24,6 +36,18 @@
 
 /** Smallest on-screen length for a note, in px. */
 export const MIN_NOTE_PX = 4;
+
+/**
+ * Smallest on-screen length for a note, in flow-clock MILLISECONDS.
+ *
+ * Display-only: enforced when computing the rendered `height` so a very short
+ * tap cannot render as a sliver. It never changes the note's stored/sounded
+ * duration (`durationTick`).
+ */
+export const MIN_NOTE_MS = 100;
+
+/** Flow-clock speed in quarter notes per second when the caller does not override it. */
+export const DEFAULT_QUARTERS_PER_SECOND = 1.5;
 
 /** Height of one quarter note in px when the caller does not override it. */
 export const DEFAULT_PX_PER_QUARTER = 60;
@@ -47,13 +71,24 @@ export interface LiveNoteGeometryInput {
   viewHeight: number;
   /** Height of one quarter note in px. Defaults to {@link DEFAULT_PX_PER_QUARTER}. */
   pxPerQuarter?: number;
+  /**
+   * Flow-clock speed in quarter notes per second, used ONLY to express the
+   * display-only minimum length ({@link MIN_NOTE_MS}) as a pixel height.
+   * Defaults to {@link DEFAULT_QUARTERS_PER_SECOND}; non-finite or `<= 0`
+   * values fall back to that default. It does not affect `durationTick` or any
+   * other sounding behaviour.
+   */
+  quartersPerSecond?: number;
 }
 
 /** Computed on-screen placement of a single note. */
 export interface LiveNoteGeometry {
   /** Distance from the bottom (keyboard) edge, in px; always >= 0. */
   bottom: number;
-  /** Rendered length in px; always >= {@link MIN_NOTE_PX}. */
+  /**
+   * Rendered length in px; always >= {@link MIN_NOTE_PX} and >= the display-only
+   * time floor ({@link MIN_NOTE_MS} of flow time at the current speed).
+   */
   height: number;
   /** Opacity 0..1, ramping across the top {@link FADE_PORTION} of the view. */
   opacity: number;
@@ -74,6 +109,7 @@ function clamp01(value: number): number {
 export function liveNoteGeometry(input: LiveNoteGeometryInput): LiveNoteGeometry {
   const { startTick, durationTick, open, flowTick, ppq, viewHeight } = input;
   const pxPerQuarter = input.pxPerQuarter ?? DEFAULT_PX_PER_QUARTER;
+  const quartersPerSecond = input.quartersPerSecond;
 
   // Guard: an unusable time base cannot produce meaningful geometry. Returning
   // a stable zero-length-at-the-keyboard note also stops a non-finite flowTick
@@ -93,8 +129,17 @@ export function liveNoteGeometry(input: LiveNoteGeometryInput): LiveNoteGeometry
   const rawBottom = ((flowTick - endTick) / ppq) * pxPerQuarter;
   const bottom = rawBottom > 0 ? rawBottom : 0;
 
+  // Display-only floor: MIN_NOTE_MS of flow time converted to px at the current
+  // flow speed, never below the absolute MIN_NOTE_PX. Multiply before dividing
+  // so the result is float-exact (e.g. 100 * 1.5 * 60 / 1000 === 9).
+  const qps =
+    Number.isFinite(quartersPerSecond) && (quartersPerSecond as number) > 0
+      ? (quartersPerSecond as number)
+      : DEFAULT_QUARTERS_PER_SECOND;
+  const minHeight = Math.max(MIN_NOTE_PX, (MIN_NOTE_MS * qps * pxPerQuarter) / 1000);
+
   const rawHeight = ((endTick - startTick) / ppq) * pxPerQuarter;
-  const height = rawHeight > MIN_NOTE_PX ? rawHeight : MIN_NOTE_PX;
+  const height = Math.max(minHeight, rawHeight);
 
   const hasView = viewHeight > 0;
   const opacity = hasView

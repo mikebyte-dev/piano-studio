@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 
 import type { Note } from '../core/domain/types';
 import { darken, lighten, shadeByPosition } from '../core/waterfall/colors';
+import { LIVE_VELOCITY, LiveNoteStore } from '../core/waterfall/liveNotes';
+import type { LiveNote } from '../core/waterfall/liveNotes';
 import { DEFAULT_PX_PER_QUARTER, liveNoteGeometry } from '../core/waterfall/noteGeometry';
+import { flowQuartersPerSecond } from '../core/waterfall/tempo';
 import { LOWEST_PITCH } from './PianoKeyboard';
 
 // Re-export the color helpers from their new home so any existing
@@ -45,6 +48,8 @@ export interface WaterfallProps {
   activeColor: string;
   /** True while the transport is playing/recording (notes fall toward the keyboard). */
   isScrolling: boolean;
+  /** Transport tempo in BPM; drives the live-note flow speed. */
+  tempo?: number;
 }
 
 /** Clamps a value to the 0..1 range. */
@@ -60,16 +65,8 @@ const STATIC_TOP_MARGIN = 60;
 
 /** How often the live animation clock advances (ms). */
 const CLOCK_INTERVAL_MS = 33;
-/** Live notes rise at this many quarter notes per second of wall-clock time. */
-const QUARTERS_PER_SECOND = 1.5;
-/** Velocity attached to synthetic live notes (display only). */
-const LIVE_VELOCITY = 100;
-
-/** A live note: a played pitch tracked against the continuous flow clock. */
-interface LiveNote extends Note {
-  /** True while the pitch is still held; false once released. */
-  open: boolean;
-}
+/** Tempo (BPM) used for the flow speed when the caller does not provide one. */
+const DEFAULT_TEMPO = 90;
 
 function clockNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -79,9 +76,10 @@ function clockNow(): number {
  * Renders recorded notes plus live notes over the keyboard.
  *
  * Recorded notes use the transport time base (`position` / `ppq`), so they
- * rise as the transport advances and freeze when it stops. Live notes use an
- * independent, always-running flow clock (`flowTick`) so they rise the moment a
- * key is pressed, regardless of transport state.
+ * rise as the transport advances and freeze when it stops. Live notes are owned
+ * by a {@link LiveNoteStore} with an independent, always-running flow clock
+ * (`flowTick`), so they rise the moment a key is pressed, regardless of
+ * transport state.
  */
 export function Waterfall({
   recordedNotes,
@@ -92,68 +90,47 @@ export function Waterfall({
   height,
   activeColor,
   isScrolling,
+  tempo,
 }: WaterfallProps) {
-  const [liveNotes, setLiveNotes] = useState<LiveNote[]>([]);
-  const [flowTick, setFlowTick] = useState(0);
+  const quartersPerSecond = flowQuartersPerSecond(tempo ?? DEFAULT_TEMPO);
 
-  const flowTickRef = useRef(0);
+  // A single store per component instance, created lazily on first render.
+  const [store] = useState(() => new LiveNoteStore());
   const lastMsRef = useRef(0);
-  const seqRef = useRef(0);
 
-  // Reconcile the live-note set whenever the held pitches change: open a note
-  // for each newly pressed pitch, close any note whose pitch was released.
+  const { subscribe, getSnapshot } = useMemo(
+    () => ({
+      subscribe: (listener: () => void) => store.subscribe(listener),
+      getSnapshot: () => store.getSnapshot(),
+    }),
+    [store],
+  );
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+
+  // Reconcile the store's live notes whenever the held pitches change: open a
+  // note for each newly pressed pitch, close any note whose pitch was released.
   useEffect(() => {
-    const tick = flowTickRef.current;
-    setLiveNotes((prev) => {
-      let next = prev;
-      const clone = (): LiveNote[] => {
-        if (next === prev) next = [...prev];
-        return next;
-      };
+    const openPitches = new Set<number>();
+    for (const note of store.getSnapshot().notes) {
+      if (note.open) openPitches.add(note.pitch);
+    }
 
-      const openByPitch = new Map<number, LiveNote>();
-      for (const note of prev) {
-        if (note.open && !openByPitch.has(note.pitch)) openByPitch.set(note.pitch, note);
-      }
+    // Close live notes whose pitch is no longer held.
+    for (const pitch of openPitches) {
+      if (!activeNotes.has(pitch)) store.release(pitch);
+    }
 
-      // Close live notes whose pitch is no longer held.
-      for (const [pitch, note] of openByPitch) {
-        if (activeNotes.has(pitch)) continue;
-        const target = clone();
-        const index = target.findIndex((n) => n.id === note.id);
-        if (index !== -1) {
-          target[index] = {
-            ...target[index],
-            open: false,
-            durationTick: Math.max(1, tick - target[index].startTick),
-          };
-        }
-      }
+    // Open a live note for each newly pressed pitch.
+    for (const pitch of activeNotes) {
+      if (!openPitches.has(pitch)) store.press(pitch, LIVE_VELOCITY, activeColor);
+    }
+  }, [store, activeNotes, activeColor]);
 
-      // Open a live note for each newly pressed pitch.
-      for (const pitch of activeNotes) {
-        if (openByPitch.has(pitch)) continue;
-        seqRef.current += 1;
-        clone().push({
-          id: `live-${pitch}-${seqRef.current}`,
-          pitch,
-          velocity: LIVE_VELOCITY,
-          startTick: tick,
-          durationTick: 1,
-          open: true,
-          color: activeColor,
-        });
-      }
-
-      return next;
-    });
-  }, [activeNotes, activeColor]);
-
-  // Continuous animation clock: advances `flowTick` in real time and prunes
-  // live notes once they scroll off the top of the view. Runs only while
+  // Continuous animation clock: advances the store's flow clock in real time and
+  // prunes live notes once they scroll off the top of the view. Runs only while
   // something is held or a live note is still on screen.
   const activeCount = activeNotes.size;
-  const liveCount = liveNotes.length;
+  const liveCount = snapshot.notes.length;
   useEffect(() => {
     if (activeCount === 0 && liveCount === 0) return;
     lastMsRef.current = clockNow();
@@ -161,28 +138,10 @@ export function Waterfall({
       const now = clockNow();
       const dtMs = now - lastMsRef.current;
       lastMsRef.current = now;
-      const nextTick = flowTickRef.current + (dtMs * ppq * QUARTERS_PER_SECOND) / 1000;
-      flowTickRef.current = nextTick;
-      setFlowTick(nextTick);
-
-      setLiveNotes((prev) => {
-        const pruned = prev.filter((n) => {
-          if (n.open) return true;
-          const { offscreen } = liveNoteGeometry({
-            startTick: n.startTick,
-            durationTick: n.durationTick,
-            open: n.open,
-            flowTick: nextTick,
-            ppq,
-            viewHeight: height,
-          });
-          return !offscreen;
-        });
-        return pruned.length === prev.length ? prev : pruned;
-      });
+      store.advance(dtMs, ppq, quartersPerSecond, height);
     }, CLOCK_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [activeCount, liveCount, ppq, height]);
+  }, [store, activeCount, liveCount, ppq, height, quartersPerSecond]);
 
   const renderRecordedNote = (note: Note, key: string) => {
     const geom = keyGeometry(note.pitch, width);
@@ -244,9 +203,10 @@ export function Waterfall({
       startTick: note.startTick,
       durationTick: note.durationTick,
       open: note.open,
-      flowTick,
+      flowTick: snapshot.flowTick,
       ppq,
       viewHeight: height,
+      quartersPerSecond,
     });
 
     // Vertical gradient: darker near the keyboard, lighter toward the top.
@@ -289,7 +249,7 @@ export function Waterfall({
   // Defensive dedupe: never render two open notes for the same pitch. Keep the
   // first open note per pitch and drop any extra (released notes are untouched).
   const openPitches = new Set<number>();
-  const visibleLive = liveNotes.filter((note) => {
+  const visibleLive = snapshot.notes.filter((note) => {
     if (!note.open) return true;
     if (openPitches.has(note.pitch)) return false;
     openPitches.add(note.pitch);
