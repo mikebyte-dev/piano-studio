@@ -108,14 +108,6 @@ function clockNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function union(a: Set<number>, b: Set<number>): Set<number> {
-  if (b.size === 0) return a;
-  if (a.size === 0) return b;
-  const next = new Set(a);
-  for (const value of b) next.add(value);
-  return next;
-}
-
 /**
  * Applies `updater` to the selected region (or the last one when nothing is
  * selected / the id is unknown), returning a new array. Pure.
@@ -468,8 +460,9 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       if (session !== null) {
         session.onNoteOn(pitch, velocity, currentTick(), recordingColorRef.current);
       }
+      // Always create a new Set (idempotent add) so every press yields a
+      // state update, even when the pitch was already held.
       setLocalPressed((prev) => {
-        if (prev.has(pitch)) return prev;
         const next = new Set(prev);
         next.add(pitch);
         return next;
@@ -545,8 +538,11 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     }
   }, [metronomeEnabled, position, transport.ppq, timeSignature]);
 
+  // Always produce a brand-new Set so the value identity changes whenever
+  // either input changes; never return an input reference (keeps consumers
+  // that rely on reference identity to re-render reactive).
   const activeNotes = useMemo(
-    () => union(midi.activeNotes, localPressed),
+    () => new Set([...midi.activeNotes, ...localPressed]),
     [midi.activeNotes, localPressed],
   );
 

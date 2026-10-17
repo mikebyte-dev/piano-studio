@@ -97,6 +97,12 @@ export function Waterfall({
   // A single store per component instance, created lazily on first render.
   const [store] = useState(() => new LiveNoteStore());
   const lastMsRef = useRef(0);
+  // Mirrors of the render-time counts, read by the animation clock inside its
+  // stable interval callback. Kept in refs so the interval never needs to be
+  // torn down when the counts change (which would reset `lastMsRef` and stall
+  // the frames on rapid presses).
+  const activeCountRef = useRef(0);
+  const liveCountRef = useRef(0);
 
   const { subscribe, getSnapshot } = useMemo(
     () => ({
@@ -126,22 +132,29 @@ export function Waterfall({
     }
   }, [store, activeNotes, activeColor]);
 
-  // Continuous animation clock: advances the store's flow clock in real time and
-  // prunes live notes once they scroll off the top of the view. Runs only while
-  // something is held or a live note is still on screen.
-  const activeCount = activeNotes.size;
-  const liveCount = snapshot.notes.length;
+  // Keep the animation clock's view of the counts current. Synced after every
+  // render (no deps) rather than during render, which React forbids for refs.
   useEffect(() => {
-    if (activeCount === 0 && liveCount === 0) return;
+    activeCountRef.current = activeNotes.size;
+    liveCountRef.current = snapshot.notes.length;
+  });
+
+  // Continuous animation clock: advances the store's flow clock in real time and
+  // prunes live notes once they scroll off the top of the view. The interval is
+  // mounted once and always running; it skips the store update (a no-op) while
+  // nothing is held and no live note remains on screen. The held/live counts are
+  // read through refs so changing them never restarts the interval.
+  useEffect(() => {
     lastMsRef.current = clockNow();
     const timer = setInterval(() => {
       const now = clockNow();
       const dtMs = now - lastMsRef.current;
       lastMsRef.current = now;
+      if (activeCountRef.current === 0 && liveCountRef.current === 0) return;
       store.advance(dtMs, ppq, quartersPerSecond, height);
     }, CLOCK_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [store, activeCount, liveCount, ppq, height, quartersPerSecond]);
+  }, [store, ppq, height, quartersPerSecond]);
 
   const renderRecordedNote = (note: Note, key: string) => {
     const geom = keyGeometry(note.pitch, width);
