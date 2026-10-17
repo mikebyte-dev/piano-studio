@@ -42,3 +42,6 @@ yarn-error.*
 
 # contexto privado del agente (no versionado)
 .opencode/context/
+
+# local tarballs (midi-android dev dependency)
+*.tgz

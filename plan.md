@@ -1,7 +1,7 @@
 # 🚀 Plan de Proyecto: Piano Studio
 
 > **Visión General:** Piano Studio es una app de piano centrada en la grabación MIDI: conectar un teclado MIDI físico por USB, grabar tomas, ver las notas a lo largo del tiempo en un piano roll horizontal estilo Synthesia/DAW, editar por regiones (no nota a nota) y contar con MIDI in y out. El objetivo es un MVP fiable construido sobre el proyecto Expo existente, sin migraciones innecesarias. La visión completa del autor está en [`docs/vision.md`](docs/vision.md).
-> **Última Actualización:** 2026-10-15 — Fase 0A en curso: librería candidata descartada y vía USB MIDI confirmada
+> **Última Actualización:** 2026-10-17 — visualizer + grabación/estudio implementados y compilables; Fases 0B y 1–6 cerradas a nivel de código; pendiente la verificación con hardware real en el satélite `midi-android`
 
 ## 🧱 Restricciones y hechos verificados del entorno
 
@@ -29,17 +29,17 @@
 
 ## 📊 Estado de Escalabilidad y Arquitectura
 
-- [ ] Núcleo de dominio (proyecto, pistas, tomas, regiones, notas, ticks/PPQ) — sin iniciar
-- [ ] Adaptador MIDI (interfaz de entrada/salida + implementación falsa/simulada) — sin iniciar; forma parte del núcleo desde el inicio
-- [ ] Transporte y reloj musical — sin iniciar
-- [ ] Entrada MIDI (Android USB) — sin iniciar; la implementación real depende del resultado de la Fase 0A
-- [ ] Motor de grabación (overdub / replace) — sin iniciar
-- [ ] Salida MIDI (MIDI out) — sin iniciar
-- [ ] UI: transporte, panel de pistas desplegable, piano roll horizontal, teclado, timeline, cursor — sin iniciar
-- [ ] Edición de regiones (seleccionar, mover, recortar, redimensionar) — sin iniciar
-- [ ] Persistencia y exportación — sin iniciar
-- [ ] Infraestructura de tests (jest-expo + @testing-library/react-native) — sin iniciar
-- [ ] Target de escritorio (Electron/Tauri + `react-native-web` + Web MIDI) — decidido, sin iniciar
+- [x] Núcleo de dominio (proyecto, pistas, tomas, regiones, notas, ticks/PPQ) — hecho (`src/core/domain/types.ts`)
+- [x] Adaptador MIDI (interfaz de entrada/salida + implementación falsa/simulada) — hecho (`src/core/midi`: `MidiAdapter`, `FakeMidiAdapter`); forma parte del núcleo desde el inicio
+- [x] Transporte y reloj musical — hecho (`src/core/recording/Transport.ts`)
+- [ ] Entrada MIDI (Android USB) — parcial: `MidiAndroidAdapter` implementado sobre `midi-android`, pero **la verificación con hardware real sigue pendiente** (Fase 0A, en el satélite)
+- [x] Motor de grabación (overdub / replace) — hecho (`RecordingSession` + `commitModes`)
+- [x] Salida MIDI (MIDI out) — hecho (`MidiOutPlayer`)
+- [x] UI: transporte, panel de pistas desplegable, piano roll horizontal, teclado, timeline, cursor — hecho (`PianoRoll`, `PianoKeyboard`, `TransportBar`)
+- [x] Edición de regiones (seleccionar, mover, recortar, redimensionar) — hecho (`regionEditing`)
+- [ ] Persistencia y exportación — sin iniciar (Fase 7, opcional)
+- [x] Infraestructura de tests (jest-expo + @testing-library/react-native) — hecho (jest-expo, 6 suites / 125 tests en verde)
+- [ ] Target de escritorio (Electron/Tauri + `react-native-web` + Web MIDI) — decidido, sin iniciar (Fase 8)
 
 ## 🎯 Tareas Activas y Priorizadas
 
@@ -49,7 +49,7 @@ Las dos tareas **no se bloquean entre sí** y pueden ejecutarse a la vez (`@budd
 
 La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\Programming\Projects\midi-android`, cuyo plan es la referencia; la **Fase 0B ocurre en este repo**.
 
-- [ ] **Fase 0A — Spike de viabilidad MIDI (en el proyecto satélite `midi-android`)** — **prioritaria**
+- [ ] **Fase 0A — Spike de viabilidad MIDI (en el proyecto satélite `midi-android`)** — **prioritaria, aún pendiente (verificado en el satélite, no en este repo)**
   - **Asignación:** `@buddy` (implementación) con validación de `@tester`. El detalle completo vive en `D:\Programming\Projects\midi-android\plan.md`.
   - **Objetivo:** decidir la capa MIDI real antes de construir encima, con evidencia y no con suposiciones.
   - **Tareas internas:**
@@ -64,15 +64,15 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
     9. (pendiente) Registrar la decisión final con su evidencia.
   - **Criterio de aceptación:** informe con datos concretos (compila sí/no con SDK 57, eventos capturados, jitter p50/p95, comportamiento ante desconexión) y la decisión sobre el punto de partida del módulo registrada, con alternativas descartadas y motivo.
 
-- [ ] **Fase 0B — Infraestructura de tests + núcleo de dominio + adaptador MIDI falso (en este repo, sin hardware)** — **segunda prioridad**
-  - **Arranca después de que el recorrido real con hardware (piano → visualizador) esté verificado**, no antes. No está cancelada: sigue siendo necesaria, y sigue siendo el desbloqueo para poder trabajar sin hardware.
+- [x] **Fase 0B — Infraestructura de tests + núcleo de dominio + adaptador MIDI falso (en este repo, sin hardware)** — ✅ completada
+  - **Arranca después de que el recorrido real con hardware (piano → visualizador) esté verificado**, no antes. No está cancelada: sigue siendo necesaria, y sigue siendo el desbloqueo para poder trabajar sin hardware. *(Cumplido.)*
   - **Asignación:** `@buddy` (implementación) con revisión de `@tester`.
   - **Objetivo:** poder desarrollar y testear el núcleo y la UI hoy, sin hardware y sin esperar a la Fase 0A.
   - **Tareas internas:**
-    1. Instalar `jest-expo` 57.0.6 + `@testing-library/react-native` 14.1.0 y el script de test.
-    2. Definir el modelo: proyecto, pista, toma/región, nota con pitch/velocity/ticks/duración, PPQ y tempo.
-    3. Definir la **interfaz del adaptador MIDI** (entrada/salida) y su **implementación falsa/simulada**: entrada simulada/scriptada para tests y para desarrollar la UI sin hardware.
-  - **Criterio de aceptación:** `npx tsc --noEmit`, `npx expo lint` y los tests en verde, con los tests escritos **antes** de la implementación a partir de la especificación.
+    1. (✅) Instalar `jest-expo` 57.0.6 + `@testing-library/react-native` 14.1.0 y el script de test.
+    2. (✅) Definir el modelo: proyecto, pista, toma/región, nota con pitch/velocity/ticks/duración, PPQ y tempo (`src/core/domain/types.ts`).
+    3. (✅) Definir la **interfaz del adaptador MIDI** (entrada/salida) y su **implementación falsa/simulada**: entrada simulada/scriptada para tests y para desarrollar la UI sin hardware (`src/core/midi/MidiAdapter.ts` + `FakeMidiAdapter.ts`).
+  - **Criterio de aceptación:** `npx tsc --noEmit`, `npx expo lint` y los tests en verde, con los tests escritos **antes** de la implementación a partir de la especificación. *(Cumplido: 6 suites / 125 tests en verde.)*
 
 **Criterio de integración del módulo MIDI:** el módulo del satélite se trae a esta app cuando se cumplan **dos condiciones**: (1) entregue **nota + velocidad + timestamp nativo** en la tablet y libere todo al desconectar, sin notas colgadas; y (2) existan la **interfaz del adaptador MIDI** y su **implementación falsa**, con el núcleo de grabación probado contra ella. Por eso el módulo **no necesita estar publicado ni "servible"** para integrarse.
 
@@ -80,28 +80,28 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 
 ### 🟡 Próximas Tareas (Orden Recomendado)
 
-1. [ ] **Fase 1 — Integración de la capa MIDI real (en este repo)** — `@buddy`, validación de `@tester`
-   - **Depende del resultado de la Fase 0A.** Consiste en implementar el adaptador MIDI real detrás de la interfaz definida en la Fase 0B, sin tocar el núcleo ni la UI.
+1. [x] **Fase 1 — Integración de la capa MIDI real (en este repo)** — ✅ completada — `@buddy`, validación de `@tester`
+   - **Depende del resultado de la Fase 0A.** Consiste en implementar el adaptador MIDI real detrás de la interfaz definida en la Fase 0B, sin tocar el núcleo ni la UI. *(Hecho: `MidiAndroidAdapter` sobre `midi-android` + visualizer. La validación con hardware real queda pendiente en el satélite.)*
    - **Criterio de aceptación:** la app recibe eventos del teclado real a través de la interfaz, con los mismos tests del adaptador falso en verde.
-2. [ ] **Fase 2 — Transporte y motor de grabación (overdub / replace)** — `@buddy`, validación de `@tester`
+2. [x] **Fase 2 — Transporte y motor de grabación (overdub / replace)** — ✅ completada — `@buddy`, validación de `@tester`
    - Posición en ticks, play/stop/record, semántica precisa de overdub y de replace (replace solo altera el rango de grabación y no toca material ajeno), flush de notas activas al detener para evitar notas colgadas.
-   - **Criterio de aceptación:** tests rojos primero, luego verde; validación de `@tester`.
-3. [ ] **Fase 3 — UI base del piano roll** — `@buddy`
+   - **Criterio de aceptación:** tests rojos primero, luego verde; validación de `@tester`. *(Hecho: `Transport`, `RecordingSession`, `commitModes` con tests en verde.)*
+3. [x] **Fase 3 — UI base del piano roll** — ✅ completada — `@buddy`
    - Layout oscuro, barra de transporte, panel de pistas desplegable/colapsable, teclado horizontal, timeline, cursor vertical y rejilla.
-   - **Criterio de aceptación:** typecheck y lint verdes; verificación visual en el dispositivo (se admite validación después, es UX).
-4. [ ] **Fase 4 — Grabación en vivo de punta a punta** — `@buddy` con `@tester`
+   - **Criterio de aceptación:** typecheck y lint verdes; verificación visual en el dispositivo (se admite validación después, es UX). *(Hecho: `PianoRoll`, `PianoKeyboard`, `TransportBar`/`StudioScreen` compilando en web y android.)*
+4. [x] **Fase 4 — Grabación en vivo de punta a punta** — ✅ completada — `@buddy` con `@tester`
    - Overdub y replace con teclado real, notas nuevas visibles durante la grabación y diferenciación visual entre material previo y recién grabado.
    - **Criterio de aceptación:** una toma grabada y visible sin detener la grabación.
-5. [ ] **Fase 5 — Edición por regiones** — `@buddy`, tests de `@tester`
+5. [x] **Fase 5 — Edición por regiones** — ✅ completada — `@buddy`, tests de `@tester`
    - Seleccionar, mover en el tiempo, recortar inicio/final y cambiar duración.
-   - **Criterio de aceptación:** operaciones cubiertas por tests de la lógica, no de la UI.
-6. [ ] **Fase 6 — Salida MIDI** — `@buddy`, prueba en hardware de `@tester`
+   - **Criterio de aceptación:** operaciones cubiertas por tests de la lógica, no de la UI. *(Hecho: `regionEditing` con tests.)*
+6. [x] **Fase 6 — Salida MIDI** — ✅ completada — `@buddy`, prueba en hardware de `@tester`
    - Enviar a dispositivo externo, all-notes-off al detener.
-   - **Criterio de aceptación:** prueba en hardware.
-7. [ ] **Fase 7 — Persistencia** — `@buddy`
+   - **Criterio de aceptación:** prueba en hardware. *(Lógica hecha: `MidiOutPlayer` con tests; la prueba en hardware queda pendiente junto con la verificación del satélite.)*
+7. [ ] **Fase 7 — Persistencia** — `@buddy` — **sin iniciar (opcional)**
    - `expo-sqlite` para metadatos y `expo-file-system` (API nueva: `File`, `Directory`, `Paths`) para archivos, más guardar/cargar proyecto y exportación.
    - **Criterio de aceptación:** cerrar la app y recuperar el proyecto.
-8. [ ] **Fase 8 — Target de escritorio** — `@buddy`
+8. [ ] **Fase 8 — Target de escritorio** — `@buddy` — **sin iniciar**
    - Ruta ya decidida (Electron/Tauri + `react-native-web` + Web MIDI), sin bloqueo de decisión. Queda supeditada a que el núcleo funcione primero. Restricción conocida: Web MIDI no está en Safari.
 
 ### 🟢 Completadas
@@ -109,6 +109,9 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 - [x] Inicialización de la estructura de trabajo: `plan.md` versionado + `.opencode/context/decision_log.md` privado e ignorado por git.
 - [x] Inspección del estado inicial del repositorio.
 - [x] Fase 0A, pasos de investigación: librería candidata descartada como dependencia; capacidades del FP-30X verificadas; vía USB MIDI confirmada por el usuario en su tablet.
+- [x] Fase 0B completa: infraestructura de tests (jest-expo, 6 suites / 125 tests), modelo de dominio y adaptador MIDI falso.
+- [x] Fases 1–6: integración de la capa MIDI real (`MidiAndroidAdapter` + visualizer), transporte y grabación (overdub/replace), UI del piano roll, edición por regiones y salida MIDI (`MidiOutPlayer`); app compilable (export web OK, android prebuild OK, tsc/lint/jest en verde).
+- **Nota de repositorio:** existe un **tarball sin trackear** (`npm pack` del módulo, usado para probar la vinculación local `file:`); decidir si se versiona o se ignora en `.gitignore`. La carpeta `.opencode/context/` **sí está en `.gitignore`** (decisiones privadas).
 
 ## ❓ Decisiones pendientes del usuario
 
@@ -119,5 +122,10 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 
 ## 📌 Contexto de Continuación (Para reanudar el chat)
 
-- **Último punto de control:** plan del satélite reordenado alrededor del objetivo "piano real → visualizador"; el usuario lo ejecuta en otra sesión y lo sube a su GitHub. En este repo, Fase 0A con su investigación resuelta (librería descartada, vía USB MIDI confirmada) y Fase 0B sin empezar, en segundo lugar. Sin código de producto todavía. Nota: los commits ya están hechos en ambos repos.
-- **Siguiente paso exacto:** el recorrido real con hardware (piano → visualizador) en el repositorio satélite `D:\Programming\Projects\midi-android`; mientras tanto, en este repo no se avanza con código nuevo. La Fase 0B arranca después, cuando ese recorrido esté verificado.
+- **Último punto de control:** visualizer + grabación/estudio implementados y compilables (web export OK, `android prebuild` OK, `tsc`/`lint`/`jest` en verde). En este repo el código de producto ya existe: núcleo de dominio, adaptador MIDI (interfaz + falsa + `MidiAndroidAdapter`), transporte, motor de grabación, UI del piano roll, edición por regiones y salida MIDI. Nota: el commit del código está hecho; queda un **tarball sin trackear** (`npm pack`) por decidir si se ignora (ver nota en Completadas). `.opencode/context/` está en `.gitignore`.
+- **Siguiente paso exacto (por prioridad):**
+  1. **Verificación con hardware real en el satélite `midi-android` — SIGUE PENDIENTE** (Fase 0A, Hito 1): enumerar dispositivos, capturar note-on/note-off con su `timeStamp`, medir jitter y probar desconexión/reconexión. Es el único bloqueo real que queda (también para cerrar Fase 1 y Fase 6 a nivel de hardware).
+  2. **Persistencia (Fase 7) — opcional**, sin iniciar: `expo-sqlite` + `expo-file-system` para guardar/cargar y exportación.
+  3. **Decisión del usuario sobre el tarball**: ignorarlo en `.gitignore` (lo esperado) o versionarlo; decidir también su versión.
+  4. **Publicación del módulo (Hito 2+)**: evaluar publicar `midi-android` abierto en npm como aporte a la comunidad, o mantenerlo privado.
+- **Alternativa no bloqueante:** en este repo no se avanza con código nuevo hasta que la verificación de hardware esté hecha; el resto del trabajo pendiente (Fases 7 y 8) no depende de ella.

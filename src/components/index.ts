@@ -1,0 +1,10 @@
+export { PianoKeyboard, LOWEST_PITCH, HIGHEST_PITCH } from './PianoKeyboard';
+export type { PianoKeyboardProps } from './PianoKeyboard';
+export { SustainPedal } from './SustainPedal';
+export type { SustainPedalProps } from './SustainPedal';
+export { PianoRoll } from './PianoRoll';
+export type { PianoRollProps } from './PianoRoll';
+export { TransportBar } from './TransportBar';
+export type { TransportBarProps } from './TransportBar';
+export { RegionTools } from './RegionTools';
+export type { RegionToolsProps } from './RegionTools';
