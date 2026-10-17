@@ -1,7 +1,7 @@
 # 🚀 Plan de Proyecto: Piano Studio
 
 > **Visión General:** Piano Studio es una app de piano centrada en la grabación MIDI: conectar un teclado MIDI físico por USB, grabar tomas, ver las notas a lo largo del tiempo en un piano roll horizontal estilo Synthesia/DAW, editar por regiones (no nota a nota) y contar con MIDI in y out. El objetivo es un MVP fiable construido sobre el proyecto Expo existente, sin migraciones innecesarias. La visión completa del autor está en [`docs/vision.md`](docs/vision.md).
-> **Última Actualización:** 2026-10-17 — visualizer + grabación/estudio implementados y compilables; Fases 0B y 1–6 cerradas a nivel de código; pendiente la verificación con hardware real en el satélite `midi-android`
+> **Última Actualización:** 2026-10-17 — sobre el visualizer + grabación/estudio ya implementados, nuevo hito UI **estilo Synthesia**: vista principal de notas cayendo sobre el teclado (`Waterfall`), **metronome con audio** (`expo-audio`) y **fix de notas colgadas** en los taps de pantalla; `tsc`/`lint`/`jest` en verde. Fases 0B y 1–6 cerradas a nivel de código; pendiente la verificación con hardware real en el satélite `midi-android`. El hito UI está **sin commit**.
 
 ## 🧱 Restricciones y hechos verificados del entorno
 
@@ -35,7 +35,8 @@
 - [ ] Entrada MIDI (Android USB) — parcial: `MidiAndroidAdapter` implementado sobre `midi-android`, pero **la verificación con hardware real sigue pendiente** (Fase 0A, en el satélite)
 - [x] Motor de grabación (overdub / replace) — hecho (`RecordingSession` + `commitModes`)
 - [x] Salida MIDI (MIDI out) — hecho (`MidiOutPlayer`)
-- [x] UI: transporte, panel de pistas desplegable, piano roll horizontal, teclado, timeline, cursor — hecho (`PianoRoll`, `PianoKeyboard`, `TransportBar`)
+- [x] UI: transporte, panel de pistas desplegable, teclado, timeline, cursor y **vista principal de waterfall estilo Synthesia** (notas cayendo sobre el teclado, con color por pista) — hecho (`Waterfall`, `PianoKeyboard`, `TransportBar`); el `PianoRoll` clásico sigue en el repo pero ya no es la vista de `index.tsx`
+- [x] Metronome: pulsos visuales + **audio real** (accent/click en cada pulso, acento por compás 1..8, vía `expo-audio`) — hecho (`useStudio`, `assets/sounds/{accent,click}.wav`)
 - [x] Edición de regiones (seleccionar, mover, recortar, redimensionar) — hecho (`regionEditing`)
 - [ ] Persistencia y exportación — sin iniciar (Fase 7, opcional)
 - [x] Infraestructura de tests (jest-expo + @testing-library/react-native) — hecho (jest-expo, 6 suites / 125 tests en verde)
@@ -45,9 +46,9 @@
 
 ### 🔴 En Progreso
 
-Las dos tareas **no se bloquean entre sí** y pueden ejecutarse a la vez (`@buddy` puede tomar una mientras la otra espera hardware o tiempos de build), pero **por decisión del usuario la Fase 0A tiene prioridad sobre la Fase 0B**: **primero el recorrido de punta a punta con hardware real (piano → visualizador), después la infraestructura de pruebas sin hardware**.
+Las tareas de esta sección **no se bloquean entre sí** y pueden ejecutarse a la vez (`@buddy` puede tomar una mientras la otra espera hardware o tiempos de build). **Por decisión del usuario la Fase 0A tiene prioridad sobre la Fase 0B**: **primero el recorrido de punta a punta con hardware real (piano → visualizador), después la infraestructura de pruebas sin hardware**. El **Hito UI** (estilo Synthesia + metronome + fix de notas colgadas) avanzó en paralelo y **no depende de ninguna de las dos**.
 
-La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\Programming\Projects\midi-android`, cuyo plan es la referencia; la **Fase 0B ocurre en este repo**.
+La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\Programming\Projects\midi-android`, cuyo plan es la referencia; la **Fase 0B y el Hito UI ocurren en este repo**.
 
 - [ ] **Fase 0A — Spike de viabilidad MIDI (en el proyecto satélite `midi-android`)** — **prioritaria, aún pendiente (verificado en el satélite, no en este repo)**
   - **Asignación:** `@buddy` (implementación) con validación de `@tester`. El detalle completo vive en `D:\Programming\Projects\midi-android\plan.md`.
@@ -77,6 +78,20 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 **Criterio de integración del módulo MIDI:** el módulo del satélite se trae a esta app cuando se cumplan **dos condiciones**: (1) entregue **nota + velocidad + timestamp nativo** en la tablet y libere todo al desconectar, sin notas colgadas; y (2) existan la **interfaz del adaptador MIDI** y su **implementación falsa**, con el núcleo de grabación probado contra ella. Por eso el módulo **no necesita estar publicado ni "servible"** para integrarse.
 
 **Riesgo sin validar:** la vinculación de un módulo local entre dos repos (dependencia `file:`, dependencia git o módulo local de Expo). Probarla temprano **con un stub**, no el día que se necesite el piano; alternativa de emergencia: `npm pack` → tarball → dependencia `file:`.
+
+- [x] **Hito UI — Rediseño estilo Synthesia + metronome con audio + fix de notas colgadas (en este repo)** — ✅ completado a nivel de código, **sin commit**
+  - **Asignación:** `@buddy` (implementación); verificación de `tsc`/`lint`/`jest` por el orquestador.
+  - **Objetivo:** acercar la vista de práctica a Synthesia (notas cayendo verticalmente sobre el teclado), añadir un metronome audible con acento por compás y eliminar las notas colgadas al tocar en pantalla.
+  - **Tareas internas:**
+    1. (✅) **`Waterfall` estilo Synthesia** (`src/components/Waterfall.tsx`): notas cayendo hacia el teclado, geometría de teclas blancas/negras, notas vivas (mientras se sostienen) + notas grabadas, color por pista y autopoda de las notas antiguas.
+    2. (✅) **`index.tsx` reescrito**: el waterfall pasa a ser la vista principal; barra de transporte con compás (TS), selector de **color de pista** y botón de metronome. El `PianoRoll` clásico queda en el repo pero deja de usarse en la pantalla principal.
+    3. (✅) **Metronome con audio** (`src/hooks/useStudio.ts`): `expo-audio` (`createAudioPlayer`) con `assets/sounds/click.wav` y `assets/sounds/accent.wav`; acento según el compás (1..8); `setAudioModeAsync({ playsInSilentMode: true })`; degrada a solo-visual si el audio no está disponible (p. ej. web).
+    4. (✅) **Fix de notas colgadas**: los taps en pantalla guardan su `setTimeout` por pitch, limpian el timer pendiente antes de re-tap y cancelan **todos** los timers al desmontar (además del `player.cancel()`); antes podían apilarse/reaparecer como notas colgadas.
+    5. (✅) **Color de pista propagado**: `Note.color` opcional (`src/core/domain/types.ts`) capturado por `RecordingSession` y aplicado a las tomas nuevas, para distinguir visualmente la grabación en el waterfall.
+    6. (✅) **Plugins de Expo** declarados en `app.json`: `expo-audio` y `expo-asset`.
+    7. (pendiente) **Commit** del cambio (`Waterfall.tsx`, `assets/sounds/`, `index.tsx`, `useStudio.ts`, `RecordingSession.ts`, `types.ts`, `app.json`) y decidir si `desing/` (imagen de referencia) entra en git o se ignora.
+    8. (pendiente) **Verificación visual en tablet** del waterfall y del metronome (la validación de UX se admite después).
+  - **Criterio de aceptación:** `npx tsc --noEmit`, `npx expo lint` y `npx jest` en verde *(cumplido: `tsc`/`lint` OK, 6 suites / 125 tests)* + waterfall y metronome visibles/audibles en el dispositivo *(pendiente)*.
 
 ### 🟡 Próximas Tareas (Orden Recomendado)
 
@@ -111,6 +126,8 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 - [x] Fase 0A, pasos de investigación: librería candidata descartada como dependencia; capacidades del FP-30X verificadas; vía USB MIDI confirmada por el usuario en su tablet.
 - [x] Fase 0B completa: infraestructura de tests (jest-expo, 6 suites / 125 tests), modelo de dominio y adaptador MIDI falso.
 - [x] Fases 1–6: integración de la capa MIDI real (`MidiAndroidAdapter` + visualizer), transporte y grabación (overdub/replace), UI del piano roll, edición por regiones y salida MIDI (`MidiOutPlayer`); app compilable (export web OK, android prebuild OK, tsc/lint/jest en verde).
+- [x] Hito UI — rediseño estilo Synthesia (`Waterfall`), metronome con audio (`expo-audio` + `assets/sounds/{click,accent}.wav`, acento por compás 1..8) y fix de notas colgadas en los taps de pantalla; color de pista propagado (`Note.color`); `tsc`/`lint`/`jest` en verde (6 suites / 125 tests). **Sin commit.**
+- **Nota de repositorio:** existe una carpeta `desing/` con la imagen de referencia del rediseño (`Neon Piano Roll Studio Interface.png`) **sin trackear** — decidir si se versiona o se ignora (nombre con typo: `desing` en vez de `design`). Además hay cambios **sin commitear** en `app.json`, `package.json`, `src/app/index.tsx`, `src/core/domain/types.ts`, `src/core/recording/RecordingSession.ts` y `src/hooks/useStudio.ts`, junto con los nuevos `src/components/Waterfall.tsx` y `assets/sounds/`.
 - **Nota de repositorio:** existe un **tarball sin trackear** (`npm pack` del módulo, usado para probar la vinculación local `file:`); decidir si se versiona o se ignora en `.gitignore`. La carpeta `.opencode/context/` **sí está en `.gitignore`** (decisiones privadas).
 
 ## ❓ Decisiones pendientes del usuario
@@ -122,10 +139,12 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 
 ## 📌 Contexto de Continuación (Para reanudar el chat)
 
-- **Último punto de control:** visualizer + grabación/estudio implementados y compilables (web export OK, `android prebuild` OK, `tsc`/`lint`/`jest` en verde). En este repo el código de producto ya existe: núcleo de dominio, adaptador MIDI (interfaz + falsa + `MidiAndroidAdapter`), transporte, motor de grabación, UI del piano roll, edición por regiones y salida MIDI. Nota: el commit del código está hecho; queda un **tarball sin trackear** (`npm pack`) por decidir si se ignora (ver nota en Completadas). `.opencode/context/` está en `.gitignore`.
+- **Último punto de control:** hito UI estilo Synthesia implementado (waterfall + metronome con audio + fix de notas colgadas); `tsc`, `lint` y `jest` (6 suites / 125 tests) en verde. En este repo el código de producto ya existe: núcleo de dominio, adaptador MIDI (interfaz + falsa + `MidiAndroidAdapter`), transporte, motor de grabación, UI (waterfall estilo Synthesia + teclado + transporte), edición por regiones y salida MIDI. Nota: el hito UI está **sin commitear** y hay un `desing/` y un **tarball sin trackear** (`npm pack`) por decidir si se ignoran (ver notas en Completadas). `.opencode/context/` está en `.gitignore`.
 - **Siguiente paso exacto (por prioridad):**
-  1. **Verificación con hardware real en el satélite `midi-android` — SIGUE PENDIENTE** (Fase 0A, Hito 1): enumerar dispositivos, capturar note-on/note-off con su `timeStamp`, medir jitter y probar desconexión/reconexión. Es el único bloqueo real que queda (también para cerrar Fase 1 y Fase 6 a nivel de hardware).
-  2. **Persistencia (Fase 7) — opcional**, sin iniciar: `expo-sqlite` + `expo-file-system` para guardar/cargar y exportación.
-  3. **Decisión del usuario sobre el tarball**: ignorarlo en `.gitignore` (lo esperado) o versionarlo; decidir también su versión.
-  4. **Publicación del módulo (Hito 2+)**: evaluar publicar `midi-android` abierto en npm como aporte a la comunidad, o mantenerlo privado.
-- **Alternativa no bloqueante:** en este repo no se avanza con código nuevo hasta que la verificación de hardware esté hecha; el resto del trabajo pendiente (Fases 7 y 8) no depende de ella.
+  1. **Commit/cierre del hito UI** (nuevo): `src/components/Waterfall.tsx`, `assets/sounds/`, `src/app/index.tsx`, `src/hooks/useStudio.ts`, `src/core/recording/RecordingSession.ts`, `src/core/domain/types.ts`, `app.json`; decidir si `desing/` entra en git o se ignora (y, si se adopta, corregir el typo `desing` → `design`).
+  2. **Verificación visual en tablet** del waterfall y del metronome (UX; se admite validar después).
+  3. **Verificación con hardware real en el satélite `midi-android` — SIGUE PENDIENTE** (Fase 0A, Hito 1): enumerar dispositivos, capturar note-on/note-off con su `timeStamp`, medir jitter y probar desconexión/reconexión. Es el bloqueo real que queda para la vía MIDI (también para cerrar Fase 1 y Fase 6 a nivel de hardware).
+  4. **Persistencia (Fase 7) — opcional**, sin iniciar: `expo-sqlite` + `expo-file-system` para guardar/cargar y exportación.
+  5. **Decisión del usuario sobre el tarball**: ignorarlo en `.gitignore` (lo esperado) o versionarlo; decidir también su versión.
+  6. **Publicación del módulo (Hito 2+)**: evaluar publicar `midi-android` abierto en npm como aporte a la comunidad, o mantenerlo privado.
+- **Alternativa no bloqueante:** la UI/hito estilo Synthesia avanzó **sin hardware**, confirmando que el trabajo visual no depende de la verificación del satélite; lo que sí queda bloqueado por ella es únicamente la vía MIDI real (Fases 0A/1 y la prueba de hardware de la 6). Las Fases 7 y 8 tampoco dependen de esa verificación.

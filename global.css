@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Prevent text/element selection on web (touch-friendly UI). */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+}

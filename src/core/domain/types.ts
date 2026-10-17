@@ -6,6 +6,8 @@ export interface Note {
   velocity: number;
   startTick: number;
   durationTick: number;
+  /** Optional display color (hex). Used to color recorded takes in the waterfall. */
+  color?: string;
 }
 
 export interface Region {

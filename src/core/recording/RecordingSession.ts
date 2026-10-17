@@ -26,6 +26,7 @@ interface OpenNote {
   id: string;
   velocity: number;
   startTick: number;
+  color?: string;
 }
 
 let idCounter = 0;
@@ -60,7 +61,7 @@ export class RecordingSession {
     return Array.from(this.open.keys());
   }
 
-  onNoteOn(pitch: number, velocity: number, tick: number): void {
+  onNoteOn(pitch: number, velocity: number, tick: number, color?: string): void {
     // Velocity 0 is a note-off per the MIDI running-status convention.
     if (velocity <= 0) {
       this.onNoteOff(pitch, tick);
@@ -72,7 +73,7 @@ export class RecordingSession {
       this.closed.push(this.buildNote(pitch, existing, tick));
       this.open.delete(pitch);
     }
-    this.open.set(pitch, { id: nextNoteId(), velocity, startTick: tick });
+    this.open.set(pitch, { id: nextNoteId(), velocity, startTick: tick, color });
   }
 
   onNoteOff(pitch: number, tick: number): void {
@@ -111,6 +112,7 @@ export class RecordingSession {
       velocity: open.velocity,
       startTick: open.startTick,
       durationTick: Math.max(1, endTick - open.startTick),
+      color: open.color,
     };
   }
 

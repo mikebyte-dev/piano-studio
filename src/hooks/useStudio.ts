@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+
 import type { Note, Region } from '../core/domain/types';
 import type { MidiAdapter, MidiMessage } from '../core/midi/MidiAdapter';
 import { decodeMessage, noteOffBytes, noteOnBytes } from '../core/midi/messages';
@@ -55,6 +57,12 @@ export interface UseStudioResult {
   beat: number;
   metronomeEnabled: boolean;
   toggleMetronome: () => void;
+  /** Beats per measure (1..8) for the metronome accent. */
+  timeSignature: number;
+  setTimeSignature: (value: number) => void;
+  /** Color applied to notes captured by the next recording. */
+  recordingColor: string;
+  setRecordingColor: (color: string) => void;
   recordMode: RecordMode;
   setRecordMode: (mode: RecordMode) => void;
 
@@ -112,15 +120,21 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const [position, setPosition] = useState(0);
   const [tempo, setTempoState] = useState(transport.tempo);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  const [timeSignature, setTimeSignatureState] = useState(4);
+  const [recordingColor, setRecordingColor] = useState('#22c55e');
   const [recordMode, setRecordMode] = useState<RecordMode>('overdub');
   const [region, setRegion] = useState<Region | null>(null);
   const [liveNotes, setLiveNotes] = useState<Note[]>([]);
   const [localPressed, setLocalPressed] = useState<Set<number>>(() => new Set());
 
+  const accentPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+  const clickPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
+
   const anchorRef = useRef<{ ms: number; tick: number } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
   const regionRef = useRef<Region | null>(null);
   const recordModeRef = useRef<RecordMode>(recordMode);
+  const recordingColorRef = useRef<string>(recordingColor);
   const sendMessageRef = useRef(midi.sendMessage);
 
   useEffect(() => {
@@ -129,6 +143,9 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   useEffect(() => {
     recordModeRef.current = recordMode;
   }, [recordMode]);
+  useEffect(() => {
+    recordingColorRef.current = recordingColor;
+  }, [recordingColor]);
   useEffect(() => {
     sendMessageRef.current = midi.sendMessage;
   }, [midi.sendMessage]);
@@ -159,7 +176,7 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       const decoded = decodeMessage(message.data);
       if (decoded === null) return;
       if (decoded.type === 'noteOn') {
-        session.onNoteOn(decoded.pitch, decoded.velocity, currentTick());
+        session.onNoteOn(decoded.pitch, decoded.velocity, currentTick(), recordingColorRef.current);
       } else if (decoded.type === 'noteOff') {
         session.onNoteOff(decoded.pitch, currentTick());
       }
@@ -192,12 +209,14 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   }, [transportState, transport]);
 
   const commitTake = useCallback((incoming: Note[], rangeStart: number, rangeEnd: number) => {
+    const color = recordingColorRef.current;
+    const tagged = incoming.map((n) => (n.color ? n : { ...n, color }));
     setRegion((prev) => {
       const existing = prev?.notes ?? [];
       const notes =
         recordModeRef.current === 'replace'
-          ? commitReplace(existing, incoming, rangeStart, rangeEnd)
-          : commitOverdub(existing, incoming);
+          ? commitReplace(existing, tagged, rangeStart, rangeEnd)
+          : commitOverdub(existing, tagged);
       const maxEnd = notes.reduce((acc, n) => Math.max(acc, n.startTick + n.durationTick), 0);
       return {
         id: prev?.id ?? 'region-1',
@@ -211,10 +230,12 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
 
   const play = useCallback(() => {
     const t = transport;
+    // Play always starts from the beginning of the recorded take.
+    t.seek(0);
     const current = regionRef.current;
     if (current !== null) {
       player.schedule(
-        offsetNotesForPlayback(current.notes, t.position),
+        offsetNotesForPlayback(current.notes, 0),
         t.tempo,
         t.ppq,
         sendVia,
@@ -222,6 +243,7 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     }
     t.play();
     reanchor();
+    setPosition(t.position);
     setTransportState(t.state);
   }, [player, reanchor, sendVia, transport]);
 
@@ -251,9 +273,14 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       commitTake(notes, session.startTick, endTick);
     }
     t.stop();
+    t.seek(0);
+    player.cancel();
+    midi.resetNotes();
+    setLocalPressed(new Set());
+    setLiveNotes([]);
     setTransportState(t.state);
-    setPosition(t.position);
-  }, [commitTake, currentTick, player, transport]);
+    setPosition(0);
+  }, [commitTake, currentTick, midi, player, transport]);
 
   const seek = useCallback(
     (tick: number) => {
@@ -289,6 +316,11 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     setMetronomeEnabled((prev) => !prev);
   }, []);
 
+  const setTimeSignature = useCallback((value: number) => {
+    const n = Math.max(1, Math.min(8, Math.round(value)));
+    setTimeSignatureState(n);
+  }, []);
+
   const clearRegion = useCallback(() => {
     setRegion(null);
   }, []);
@@ -309,15 +341,20 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     setRegion((prev) => (prev === null ? prev : resizeRegion(prev, prev.lengthTick + deltaTick)));
   }, []);
 
+  const tapTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
   const sendNote = useCallback(
     (pitch: number, velocity: number = DEFAULT_VELOCITY) => {
+      // Clear any pending note-off for this pitch so re-taps don't stack timers.
+      const existing = tapTimersRef.current.get(pitch);
+      if (existing) clearTimeout(existing);
       sendVia(noteOnBytes(pitch, velocity));
       setLocalPressed((prev) => {
         const next = new Set(prev);
         next.add(pitch);
         return next;
       });
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         sendVia(noteOffBytes(pitch));
         setLocalPressed((prev) => {
           if (!prev.has(pitch)) return prev;
@@ -325,10 +362,56 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
           next.delete(pitch);
           return next;
         });
+        tapTimersRef.current.delete(pitch);
       }, TAP_DURATION_MS);
+      tapTimersRef.current.set(pitch, timer);
     },
     [sendVia],
   );
+
+  // Clear pending on-screen tap timers on unmount to avoid stuck notes.
+  useEffect(() => {
+    const timers = tapTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+      player.cancel();
+    };
+  }, [player]);
+
+  // Metronome audio engine: two click sounds (accent + non-accent).
+  useEffect(() => {
+    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
+    try {
+      accentPlayerRef.current = createAudioPlayer(require('../../assets/sounds/accent.wav'));
+      clickPlayerRef.current = createAudioPlayer(require('../../assets/sounds/click.wav'));
+    } catch {
+      // Audio unavailable (e.g. web without assets): metronome stays visual-only.
+    }
+    return () => {
+      try { accentPlayerRef.current?.remove(); } catch { /* noop */ }
+      try { clickPlayerRef.current?.remove(); } catch { /* noop */ }
+      accentPlayerRef.current = null;
+      clickPlayerRef.current = null;
+    };
+  }, []);
+
+  // Trigger metronome clicks when the beat advances.
+  const lastMetronomeBeatRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!metronomeEnabled) {
+      lastMetronomeBeatRef.current = null;
+      return;
+    }
+    const beatIndex = Math.floor(position / transport.ppq);
+    if (lastMetronomeBeatRef.current === beatIndex) return;
+    lastMetronomeBeatRef.current = beatIndex;
+    const isAccent = beatIndex % timeSignature === 0;
+    const player = isAccent ? accentPlayerRef.current : clickPlayerRef.current;
+    if (player) {
+      try { player.seekTo(0); player.play(); } catch { /* noop */ }
+    }
+  }, [metronomeEnabled, position, transport.ppq, timeSignature]);
 
   const activeNotes = useMemo(
     () => union(midi.activeNotes, localPressed),
@@ -360,6 +443,10 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     beat,
     metronomeEnabled,
     toggleMetronome,
+    timeSignature,
+    setTimeSignature,
+    recordingColor,
+    setRecordingColor,
     recordMode,
     setRecordMode,
 

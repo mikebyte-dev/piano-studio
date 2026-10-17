@@ -34,6 +34,8 @@ export interface UseMidiResult {
   disconnect: () => Promise<void>;
   /** Sends raw MIDI bytes to the open device (MIDI out). */
   sendMessage: (bytes: number[]) => Promise<void>;
+  /** Clears live note/sustain state (e.g. on stop/panic). */
+  resetNotes: () => void;
 }
 
 function toMessage(error: unknown): string {
@@ -128,6 +130,13 @@ export function useMidi(options: UseMidiOptions = {}): UseMidiResult {
     },
     [adapter],
   );
+
+  const resetNotes = useCallback(() => {
+    sustainDownRef.current = false;
+    setActiveNotes(new Set());
+    setSustainedNotes(new Set());
+    setSustainDown(false);
+  }, []);
 
   // Initial device enumeration (deferred to avoid synchronous setState in effect).
   useEffect(() => {
@@ -229,5 +238,6 @@ export function useMidi(options: UseMidiOptions = {}): UseMidiResult {
     connect,
     disconnect,
     sendMessage,
+    resetNotes,
   };
 }
