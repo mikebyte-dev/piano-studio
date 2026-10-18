@@ -17,9 +17,7 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
   view.
 - **Transport** — play, stop, and record, with tempo and time signature
   controls. Playback always starts from the beginning of the recorded material.
-- **Metronome** — audible accent/click pulses (`expo-audio`), with a per-measure
-  accent (1–8 beats). Off by default; falls back to visual-only if audio is
-  unavailable.
+- **Metronome** — audible accent/click pulses (`expo-audio`), with a per-measure accent (1–8 beats); off by default; falls back to visual-only if audio is unavailable. Rendered by the dedicated `Metronome` component.
 - **MIDI input** — device enumeration, manual refresh, auto-connect when a
   single device is present, and live note/sustain state from note on/off and
   CC 64 (sustain pedal).
@@ -28,9 +26,9 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
 - **Recording takes** — each finished take is committed as an independent
   **region** (with its own color); empty takes create no region. Overdub and
   replace semantics are implemented in the pure core (`commitModes`).
-- **Region editing** — select, move in time, trim start/end, and resize the
-  duration of a region. Regions can be recolored and deleted from the track
-  strip.
+- **Region editing** — recolor and delete regions from the track strip.
+  Pure move/trim/resize operations exist in the core (`regionEditing`), but
+  they are not exposed on-screen yet.
 - **MIDI output** — recorded notes are scheduled back out to the connected
   device, with all-notes-off on stop.
 
@@ -59,8 +57,9 @@ src/
     Waterfall.tsx         Synthesia-style falling-notes view
     PianoKeyboard.tsx     88-key on-screen keyboard (MIDI 21–108)
     PianoRoll.tsx         Classic piano roll (kept in the repo, not the main view)
-    TransportBar.tsx      Transport controls
-    RegionTools.tsx       Region editing controls
+    TransportBar.tsx      Transport controls (defined, not wired into the main screen)
+    Metronome.tsx         Metronome UI control (toggle, tempo, time signature)
+    RegionTools.tsx       Region editing controls (defined, not wired into the main screen)
     SustainPedal.tsx      Sustain (CC 64) indicator
   core/                   Framework-free, pure, testable logic
     domain/types.ts       Note, Region, Track, Project, PPQ/tempo defaults
@@ -70,6 +69,7 @@ src/
   hooks/
     useMidi.ts            React binding over a MidiAdapter (devices, live notes, sustain)
     useStudio.ts          Orchestrates MIDI I/O, transport, recording, playback, region editing
+    useMetronome.ts       Metronome state and audio engine
 assets/
   sounds/                 Metronome click/accent samples
   images/                 App icons and splash assets
@@ -172,6 +172,20 @@ The suite covers the pure core only — there are no component tests; testable
 behavior is extracted into pure modules (`src/core/**`). Test-first is the
 convention for new behavior. Current status: **10 test suites, 220 tests, all
 passing**.
+
+## Known limitations
+
+- `TransportBar` and `RegionTools` components exist but are not wired into the
+  main screen (`index.tsx` builds its own transport and track strip).
+- Region move/trim/resize have no on-screen control yet (only recolor + delete
+  on the track strip); the pure ops live in `regionEditing`.
+- `commitModes` (overdub/replace) pure functions exist and are tested, but the
+  recording flow stores each finished take as an independent region —
+  overdub/replace are not applied in the UI flow.
+- No persistence/export or desktop target yet (Fases 7 and 8, not started).
+- No count-in/countdown feature (a commit message mentions it, but it is not
+  implemented).
+- MIDI hardware verification pending in the satellite `midi-android` project.
 
 ## Roadmap
 
