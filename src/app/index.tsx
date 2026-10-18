@@ -29,9 +29,10 @@ export default function Index() {
   const [paletteRegionId, setPaletteRegionId] = useState<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isLandscape = windowWidth > windowHeight;
-  const keyboardHeight = isLandscape
-    ? Math.max(96, Math.round(windowHeight * 0.28))
-    : Math.max(144, Math.round(windowHeight * 0.18));
+  // Keep piano keys roughly proportional to their width to avoid
+  // overly tall ("elongated") keys on large/wide screens (web/tablet).
+  const naturalKeyHeight = Math.round((windowWidth / 52) * 5.0);
+  const keyboardHeight = Math.min(220, Math.max(150, naturalKeyHeight));
   const autoConnectedRef = useRef(false);
 
   // Auto-connect when a single device is available.
