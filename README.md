@@ -121,6 +121,26 @@ npx expo install <package>
 
 Run lint and typecheck before considering any task done.
 
+## Build & release
+
+Current version: **0.9.0**. Application id / iOS bundle id:
+**`com.mikebytedev.pianostudio`** (a global id shared across the author's
+projects; do not change it when bumping versions).
+
+To produce a standalone release APK (requires the Android SDK; regenerate
+`android/` first if native config changed — it is generated and gitignored,
+never edit it by hand):
+
+```bash
+npx expo prebuild --clean --platform android
+cd android && ./gradlew assembleRelease
+```
+
+Output: `android/app/build/outputs/apk/release/app-release.apk`
+(universal APK, ~102 MB for v0.9.0). The release is currently signed with
+the **debug keystore** — fine for personal installs, not for Play Store
+submission. Install on a device with `adb install -r <apk>`.
+
 ## MIDI support
 
 MIDI is isolated behind the `MidiAdapter` interface (`src/core/midi/MidiAdapter.ts`):
