@@ -177,7 +177,7 @@ export default function Index() {
 
       {/* Waterfall */}
       <View
-        className="flex-1"
+        className="flex-1 relative bg-zinc-800"
         onLayout={(e) => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
       >
         <Waterfall
@@ -191,23 +191,24 @@ export default function Index() {
           isScrolling={studio.transportState !== 'stopped'}
           tempo={studio.tempo}
         />
+        <View className="absolute bottom-2 right-2 z-10">
+          <SustainPedal down={studio.sustainDown} />
+        </View>
       </View>
 
-      {/* Red felt strip, like a professional piano */}
-      <View className="h-[3px] w-full bg-red-600" />
+      {/* Red felt strip, separated by a dark gray margin with black borders */}
+      <View className="w-full border-y border-black bg-zinc-900 px-0 pt-2 pb-0">
+        <View className="h-[3px] w-full rounded-sm bg-red-600" />
+      </View>
 
       {/* Piano keyboard (keys highlight in every mode) */}
-      <View className="h-44">
+      <View className="h-44 mb-3">
         <PianoKeyboard
           activeNotes={studio.activeNotes}
           sustainedNotes={studio.sustainedNotes}
           onKeyDown={studio.startNote}
           onKeyUp={studio.stopNote}
         />
-      </View>
-
-      <View className="flex-row justify-end px-3 py-1">
-        <SustainPedal down={studio.sustainDown} />
       </View>
     </SafeAreaView>
   );
