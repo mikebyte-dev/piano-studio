@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-
 import type { Note, Region } from '../core/domain/types';
 import type { MidiAdapter, MidiMessage } from '../core/midi/MidiAdapter';
 import { decodeMessage, noteOffBytes, noteOnBytes } from '../core/midi/messages';
@@ -18,6 +16,10 @@ import { createTransport, msToTick, type TransportState } from '../core/recordin
 import { useMidi, type UseMidiResult } from './useMidi';
 
 export type RecordMode = 'overdub' | 'replace';
+
+/** Beats-per-measure range accepted by the time-signature control. */
+const TIME_SIGNATURE_MIN = 1;
+const TIME_SIGNATURE_MAX = 8;
 
 const DEFAULT_VELOCITY = 100;
 /** How long an on-screen key tap keeps the note down (ms). */
@@ -52,18 +54,19 @@ export interface UseStudioResult {
   position: number;
   tempo: number;
   ppq: number;
-  /** 1-based quarter-note beat under the cursor (metronome, off by default). */
-  beat: number;
-  metronomeEnabled: boolean;
-  toggleMetronome: () => void;
-  /** Beats per measure (1..8) for the metronome accent. */
-  timeSignature: number;
-  setTimeSignature: (value: number) => void;
   /** Color applied to notes captured by the next recording. */
   recordingColor: string;
   setRecordingColor: (color: string) => void;
   recordMode: RecordMode;
   setRecordMode: (mode: RecordMode) => void;
+
+  // Metronome
+  /** Whether the metronome click is audible. */
+  metronomeEnabled: boolean;
+  setMetronomeEnabled: (enabled: boolean) => void;
+  /** Beats per measure (1..8); the accent falls on the first. */
+  timeSignature: number;
+  setTimeSignature: (value: number) => void;
 
   // Transport actions
   play: () => void;
@@ -135,8 +138,7 @@ function mapSelectedRegion(
  * the most recent one. `recordMode` is still surfaced for the UI but takes are
  * no longer merged.
  *
- * Note: the metronome has no audio engine — it exposes a beat counter the UI can
- * pulse. Off by default.
+ * The metronome is not part of this hook: it lives in `useMetronome`.
  */
 export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const handleMidiMessageRef = useRef<(message: MidiMessage) => void>(() => {});
@@ -148,17 +150,14 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const [transportState, setTransportState] = useState<TransportState>('stopped');
   const [position, setPosition] = useState(0);
   const [tempo, setTempoState] = useState(transport.tempo);
-  const [metronomeEnabled, setMetronomeEnabled] = useState(false);
-  const [timeSignature, setTimeSignatureState] = useState(4);
   const [recordingColor, setRecordingColor] = useState('#22c55e');
   const [recordMode, setRecordMode] = useState<RecordMode>('overdub');
+  const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  const [timeSignature, setTimeSignatureState] = useState(4);
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [liveNotes, setLiveNotes] = useState<Note[]>([]);
   const [localPressed, setLocalPressed] = useState<Set<number>>(() => new Set());
-
-  const accentPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const clickPlayerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
 
   const anchorRef = useRef<{ ms: number; tick: number } | null>(null);
   const sessionRef = useRef<RecordingSession | null>(null);
@@ -341,12 +340,9 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     [reanchor, transport],
   );
 
-  const toggleMetronome = useCallback(() => {
-    setMetronomeEnabled((prev) => !prev);
-  }, []);
-
+  /** Clamps to 1..8 (beats per measure). */
   const setTimeSignature = useCallback((value: number) => {
-    const n = Math.max(1, Math.min(8, Math.round(value)));
+    const n = Math.max(TIME_SIGNATURE_MIN, Math.min(TIME_SIGNATURE_MAX, Math.round(value)));
     setTimeSignatureState(n);
   }, []);
 
@@ -524,40 +520,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     };
   }, [player]);
 
-  // Metronome audio engine: two click sounds (accent + non-accent).
-  useEffect(() => {
-    void setAudioModeAsync({ playsInSilentMode: true }).catch(() => undefined);
-    try {
-      accentPlayerRef.current = createAudioPlayer(require('../../assets/sounds/accent.wav'));
-      clickPlayerRef.current = createAudioPlayer(require('../../assets/sounds/click.wav'));
-    } catch {
-      // Audio unavailable (e.g. web without assets): metronome stays visual-only.
-    }
-    return () => {
-      try { accentPlayerRef.current?.remove(); } catch { /* noop */ }
-      try { clickPlayerRef.current?.remove(); } catch { /* noop */ }
-      accentPlayerRef.current = null;
-      clickPlayerRef.current = null;
-    };
-  }, []);
-
-  // Trigger metronome clicks when the beat advances.
-  const lastMetronomeBeatRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!metronomeEnabled) {
-      lastMetronomeBeatRef.current = null;
-      return;
-    }
-    const beatIndex = Math.floor(position / transport.ppq);
-    if (lastMetronomeBeatRef.current === beatIndex) return;
-    lastMetronomeBeatRef.current = beatIndex;
-    const isAccent = beatIndex % timeSignature === 0;
-    const player = isAccent ? accentPlayerRef.current : clickPlayerRef.current;
-    if (player) {
-      try { player.seekTo(0); player.play(); } catch { /* noop */ }
-    }
-  }, [metronomeEnabled, position, transport.ppq, timeSignature]);
-
   // Always produce a brand-new Set so the value identity changes whenever
   // either input changes; never return an input reference (keeps consumers
   // that rely on reference identity to re-render reactive).
@@ -577,8 +539,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
 
   /** Backward-compatible alias: the most recently committed region. */
   const region = regions.length > 0 ? regions[regions.length - 1] : null;
-
-  const beat = Math.floor(position / transport.ppq) + 1;
 
   return {
     supported: midi.supported,
@@ -600,15 +560,15 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     position,
     tempo,
     ppq: transport.ppq,
-    beat,
-    metronomeEnabled,
-    toggleMetronome,
-    timeSignature,
-    setTimeSignature,
     recordingColor,
     setRecordingColor,
     recordMode,
     setRecordMode,
+
+    metronomeEnabled,
+    setMetronomeEnabled,
+    timeSignature,
+    setTimeSignature,
 
     play,
     stop,

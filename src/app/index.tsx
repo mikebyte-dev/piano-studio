@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Metronome } from '../components/Metronome';
 import { PianoKeyboard } from '../components/PianoKeyboard';
 import { Waterfall } from '../components/Waterfall';
 import { useStudio } from '../hooks/useStudio';
@@ -40,63 +41,14 @@ export default function Index() {
   const recordedNotes = studio.recordedNotes;
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-900">
-      {/* Top transport bar */}
-      <View className="flex-row flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2">
-        <Text className="mr-2 text-lg font-bold text-white">Piano Studio</Text>
+    <SafeAreaView className="relative flex-1 bg-zinc-900">
+      {/* Header */}
+      <View className="border-b border-zinc-800 px-3 py-2">
+        <Text className="text-lg font-bold text-white">Piano Studio</Text>
+      </View>
 
-        <Pressable
-          onPress={studio.transportState === 'playing' ? studio.stop : studio.play}
-          className="rounded-md bg-emerald-600 px-3 py-1.5"
-        >
-          <Text className="text-sm font-semibold text-white">
-            {studio.transportState === 'playing' ? 'Stop' : 'Play'}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={studio.transportState === 'recording' ? studio.stop : studio.record}
-          className="rounded-md bg-red-600 px-3 py-1.5"
-        >
-          <Text className="text-sm font-semibold text-white">
-            {studio.transportState === 'recording' ? 'Stop Rec' : 'Rec'}
-          </Text>
-        </Pressable>
-
-        <View className="flex-row items-center gap-1">
-          <Pressable onPress={() => studio.setTempo(studio.tempo - 5)} className="rounded bg-zinc-800 px-2 py-1">
-            <Text className="text-white">-</Text>
-          </Pressable>
-          <Text className="w-12 text-center text-white">{studio.tempo}</Text>
-          <Pressable onPress={() => studio.setTempo(studio.tempo + 5)} className="rounded bg-zinc-800 px-2 py-1">
-            <Text className="text-white">+</Text>
-          </Pressable>
-        </View>
-
-        <View className="flex-row items-center gap-1">
-          <Text className="text-xs text-zinc-400">TS</Text>
-          <Pressable
-            onPress={() => studio.setTimeSignature(studio.timeSignature - 1)}
-            className="rounded bg-zinc-800 px-2 py-1"
-          >
-            <Text className="text-white">-</Text>
-          </Pressable>
-          <Text className="w-8 text-center text-white">{studio.timeSignature}/4</Text>
-          <Pressable
-            onPress={() => studio.setTimeSignature(studio.timeSignature + 1)}
-            className="rounded bg-zinc-800 px-2 py-1"
-          >
-            <Text className="text-white">+</Text>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={studio.toggleMetronome}
-          className={`rounded-md px-3 py-1.5 ${studio.metronomeEnabled ? 'bg-amber-500' : 'bg-zinc-800'}`}
-        >
-          <Text className="text-sm font-semibold text-white">Metronome</Text>
-        </Pressable>
-
+      {/* Transport bar: devices · Play/Rec · Metronome */}
+      <View className="flex-row items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2">
         {/* Device menu */}
         <View className="flex-row items-center gap-1">
           {studio.devices.length > 1 ? (
@@ -121,8 +73,42 @@ export default function Index() {
           </Pressable>
         </View>
 
-        {studio.error ? <Text className="text-xs text-red-400">{studio.error}</Text> : null}
+        {/* Transport controls */}
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={studio.transportState === 'playing' ? studio.stop : studio.play}
+            className="rounded-md bg-emerald-600 px-3 py-1.5"
+          >
+            <Text className="text-sm font-semibold text-white">
+              {studio.transportState === 'playing' ? 'Stop' : 'Play'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={studio.transportState === 'recording' ? studio.stop : studio.record}
+            className="rounded-md bg-red-600 px-3 py-1.5"
+          >
+            <Text className="text-sm font-semibold text-white">
+              {studio.transportState === 'recording' ? 'Stop Rec' : 'Rec'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Metronome */}
+        <Metronome
+          tempo={studio.tempo}
+          isPlaying={studio.transportState !== 'stopped'}
+          position={studio.position}
+          ppq={studio.ppq}
+          enabled={studio.metronomeEnabled}
+          onEnabledChange={studio.setMetronomeEnabled}
+          timeSignature={studio.timeSignature}
+          onTimeSignatureChange={studio.setTimeSignature}
+          onTempoChange={studio.setTempo}
+        />
       </View>
+
+      {studio.error ? <Text className="px-3 py-1 text-xs text-red-400">{studio.error}</Text> : null}
 
       {/* Recorded tracks */}
       {studio.regions.length > 0 ? (
@@ -220,7 +206,7 @@ export default function Index() {
       </View>
 
       <Text className="px-3 py-1 text-xs text-zinc-500">
-        {studio.sustainDown ? 'Sustain: down' : 'Sustain: up'} · beat {studio.beat} · notes {recordedNotes.length}
+        {studio.sustainDown ? 'Sustain: down' : 'Sustain: up'} · notes {recordedNotes.length}
       </Text>
     </SafeAreaView>
   );

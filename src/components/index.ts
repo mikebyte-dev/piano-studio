@@ -8,3 +8,5 @@ export { TransportBar } from './TransportBar';
 export type { TransportBarProps } from './TransportBar';
 export { RegionTools } from './RegionTools';
 export type { RegionToolsProps } from './RegionTools';
+export { Metronome } from './Metronome';
+export type { MetronomeProps } from './Metronome';
