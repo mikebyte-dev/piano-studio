@@ -9,7 +9,7 @@ export interface SustainPedalProps {
 export function SustainPedal({ down }: SustainPedalProps) {
   return (
     <View
-      className={`h-10 w-16 items-center justify-center rounded-sm border ${
+      className={`h-7 w-12 items-center justify-center rounded-lg border ${
         down ? 'border-violet-500 bg-violet-700' : 'border-zinc-600 bg-zinc-800'
       }`}
       style={{

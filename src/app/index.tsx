@@ -206,9 +206,8 @@ export default function Index() {
         />
       </View>
 
-      <View className="flex-row items-center gap-3 px-3 py-1">
+      <View className="flex-row justify-end px-3 py-1">
         <SustainPedal down={studio.sustainDown} />
-        <Text className="text-xs text-zinc-500">notes {recordedNotes.length}</Text>
       </View>
     </SafeAreaView>
   );
