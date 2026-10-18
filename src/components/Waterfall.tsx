@@ -4,8 +4,7 @@ import { View } from 'react-native';
 import type { Note } from '../core/domain/types';
 import { darken, lighten, shadeByPosition } from '../core/waterfall/colors';
 import { LIVE_VELOCITY, LiveNoteStore } from '../core/waterfall/liveNotes';
-import type { LiveNote } from '../core/waterfall/liveNotes';
-import { DEFAULT_PX_PER_QUARTER, liveNoteGeometry } from '../core/waterfall/noteGeometry';
+import { liveNoteGeometry } from '../core/waterfall/noteGeometry';
 import { flowQuartersPerSecond } from '../core/waterfall/tempo';
 import { HIGHEST_PITCH, LOWEST_PITCH } from './PianoKeyboard';
 
@@ -59,10 +58,6 @@ function clamp01(value: number): number {
   return value;
 }
 
-/** Recorded notes fade out after this many quarter notes of transport age. */
-const MAX_AGE_QUARTERS = 6;
-const STATIC_TOP_MARGIN = 60;
-
 /** How often the live animation clock advances (ms). */
 const CLOCK_INTERVAL_MS = 16;
 /** Tempo (BPM) used for the flow speed when the caller does not provide one. */
@@ -75,9 +70,10 @@ function clockNow(): number {
 /**
  * Renders recorded notes plus live notes over the keyboard.
  *
- * Recorded notes use the transport time base (`position` / `ppq`), so they
- * rise as the transport advances and freeze when it stops. Live notes are owned
- * by a {@link LiveNoteStore} with an independent, always-running flow clock
+ * Recorded notes use the transport time base (`position` / `ppq`) and are only
+ * drawn while the transport is running (`isScrolling`), so the waterfall is
+ * clean when the transport is stopped. Live notes are owned by a
+ * {@link LiveNoteStore} with an independent, always-running flow clock
  * (`flowTick`), so they rise the moment a key is pressed, regardless of
  * transport state.
  */
@@ -118,13 +114,6 @@ export function Waterfall({
     [store],
   );
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
-
-  // Static-overview scale factor: the latest note start in the track. Memoised
-  // so the render loop does not re-scan every recorded note on each frame.
-  const maxStart = useMemo(
-    () => recordedNotes.reduce((max, n) => Math.max(max, n.startTick), 0),
-    [recordedNotes],
-  );
 
   // Pitch -> {left, width} for the whole keyboard, rebuilt only when the
   // viewport width changes. Lets the render functions look geometry up by pitch
@@ -185,78 +174,44 @@ export function Waterfall({
     return () => clearInterval(timer);
   }, [store]);
 
-  const renderRecordedNote = (note: Note, key: string) => {
-    const geom = pitchGeometry.get(note.pitch) ?? keyGeometry(note.pitch, width);
-    let bottom: number;
-    let h: number;
-    let opacity: number;
-
-    if (isScrolling) {
-      const age = position - note.startTick;
-      bottom = (age / ppq) * DEFAULT_PX_PER_QUARTER;
-      h = Math.max(4, (note.durationTick / ppq) * DEFAULT_PX_PER_QUARTER);
-      opacity = Math.max(0, 1 - age / (MAX_AGE_QUARTERS * ppq));
-    } else {
-      // Static overview: fit the whole phrase between the bottom edge and a
-      // small top margin so recorded tracks stay permanently visible.
-      const pxPerTick = maxStart > 0 ? (height - STATIC_TOP_MARGIN) / maxStart : 1;
-      bottom = note.startTick * pxPerTick;
-      h = Math.max(4, note.durationTick * pxPerTick);
-      opacity = 1;
-    }
-
-    // Vertical gradient: darker near the keyboard, lighter toward the top.
-    const t = height > 0 ? clamp01((bottom + h / 2) / height) : 1;
-    const fill = shadeByPosition(note.color || activeColor, t);
-
-    return (
-      <View
-        key={key}
-        style={{
-          position: 'absolute',
-          left: geom.left,
-          width: geom.width - 1,
-          bottom,
-          height: h,
-          backgroundColor: fill,
-          borderTopWidth: 1.5,
-          borderTopColor: lighten(fill, 0.35),
-          borderBottomWidth: 1.5,
-          borderBottomColor: darken(fill, 0.35),
-          borderRadius: 4,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.5,
-          shadowRadius: 4,
-          elevation: 4,
-          opacity,
-        }}
-      />
-    );
-  };
-
-  const renderLiveNote = (note: LiveNote) => {
-    const geom = pitchGeometry.get(note.pitch) ?? keyGeometry(note.pitch, width);
-    // While held the bar is anchored to the keyboard (bottom: 0) and grows
-    // upward; on release it freezes at its real length and rides the flow clock
-    // up and away from the keys.
-    const { bottom, height: noteHeight, opacity } = liveNoteGeometry({
-      startTick: note.startTick,
-      durationTick: note.durationTick,
-      open: note.open,
-      flowTick: snapshot.flowTick,
+  /**
+   * Shared note renderer for both the store's live notes and the recorded
+   * (closed) notes shown while the transport runs. Both go through the same
+   * `liveNoteGeometry`, so a recorded note and the live note that captured it
+   * occupy identical screen space. Returns `null` once a closed note has
+   * scrolled off the top of the view (open notes are never offscreen).
+   */
+  const renderAsLive = (
+    pitch: number,
+    startTick: number,
+    durationTick: number,
+    open: boolean,
+    color: string,
+    flowTick: number,
+    key: string,
+  ) => {
+    const geom = pitchGeometry.get(pitch) ?? keyGeometry(pitch, width);
+    // While open the bar is anchored to the keyboard (bottom: 0) and grows
+    // upward; once closed it freezes at its real length and rides the flow
+    // clock up and away from the keys.
+    const { bottom, height: noteHeight, opacity, offscreen } = liveNoteGeometry({
+      startTick,
+      durationTick,
+      open,
+      flowTick,
       ppq,
       viewHeight: height,
       quartersPerSecond,
     });
+    if (offscreen) return null;
 
     // Vertical gradient: darker near the keyboard, lighter toward the top.
     const t = height > 0 ? clamp01((bottom + noteHeight / 2) / height) : 1;
-    const fill = shadeByPosition(activeColor, t);
+    const fill = shadeByPosition(color || activeColor, t);
 
     return (
       <View
-        key={note.id}
+        key={key}
         style={{
           position: 'absolute',
           left: geom.left,
@@ -280,12 +235,33 @@ export function Waterfall({
     );
   };
 
-  const visibleRecorded = isScrolling
-    ? recordedNotes.filter((n) => {
-        const age = position - n.startTick;
-        return age >= 0 && age < MAX_AGE_QUARTERS * ppq;
-      })
-    : recordedNotes;
+  // Recorded (committed) notes are shown only while the transport is
+  // playing/recording, each drawn as a synthetic live note laid out on the
+  // transport time base (`flowTick = position`). A note is OPEN (anchored to
+  // the keyboard, growing) while the playhead is still inside its duration, and
+  // becomes CLOSED (frozen at its real length, rising and fading) once the
+  // playhead passes its end — identical to how a held live note behaves.
+  // Routing them through the same `renderAsLive` helper keeps their geometry and
+  // color identical to the live notes. When the transport is stopped (idle) the
+  // waterfall is clean:
+  // only live notes from held keys are drawn, so the frozen take no longer
+  // overlaps the keyboard.
+  const recordedNodes = isScrolling
+    ? recordedNotes
+        .filter((n) => position - n.startTick >= 0)
+        .map((n) =>
+          renderAsLive(
+            n.pitch,
+            n.startTick,
+            n.durationTick,
+            position < n.startTick + n.durationTick,
+            n.color || activeColor,
+            position,
+            `r-${n.id}`,
+          ),
+        )
+        .filter((node) => node !== null)
+    : [];
 
   // Defensive dedupe: never render two open notes for the same pitch. Keep the
   // first open note per pitch and drop any extra (released notes are untouched).
@@ -321,8 +297,10 @@ export function Waterfall({
           />
         );
       })}
-      {visibleRecorded.map((n, i) => renderRecordedNote(n, `r-${n.id}-${i}`))}
-      {visibleLive.map(renderLiveNote)}
+      {recordedNodes}
+      {visibleLive.map((n) =>
+        renderAsLive(n.pitch, n.startTick, n.durationTick, n.open, n.color, snapshot.flowTick, n.id),
+      )}
     </View>
   );
 }

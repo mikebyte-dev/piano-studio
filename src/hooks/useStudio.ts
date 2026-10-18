@@ -23,7 +23,7 @@ const TIME_SIGNATURE_MAX = 8;
 const DEFAULT_VELOCITY = 100;
 /** How long an on-screen key tap keeps the note down (ms). */
 const TAP_DURATION_MS = 300;
-const CLOCK_INTERVAL_MS = 33;
+const CLOCK_INTERVAL_MS = 16;
 
 export interface UseStudioOptions {
   /** Adapter injected into `useMidi` (defaults to the real one). */
@@ -82,7 +82,7 @@ export interface UseStudioResult {
   region: Region | null;
   /** Notes captured by the in-progress take, shown while recording. */
   liveNotes: Note[];
-  /** Every recorded note (all regions flattened) plus the in-progress take. */
+  /** Every recorded note (all committed regions flattened), excluding the in-progress take. */
   recordedNotes: Note[];
   /** Removes the region with the given id; keeps the selection valid. */
   deleteRegion: (id: string) => void;
@@ -502,13 +502,14 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     [midi.activeNotes, localPressed],
   );
 
-  /** All recorded notes across every take, plus the in-progress take. */
+  /**
+   * All recorded notes across every committed take (flattened). The in-progress
+   * take is deliberately excluded: it is rendered by the waterfall's live-note
+   * store (`liveNotes`), so including it here would draw it twice.
+   */
   const recordedNotes = useMemo(
-    () => [
-      ...regions.flatMap((region) => region.notes.map((n) => ({ ...n, color: region.color ?? n.color }))),
-      ...liveNotes,
-    ],
-    [regions, liveNotes],
+    () => regions.flatMap((region) => region.notes.map((n) => ({ ...n, color: region.color ?? n.color }))),
+    [regions],
   );
 
   /** Backward-compatible alias: the most recently committed region. */

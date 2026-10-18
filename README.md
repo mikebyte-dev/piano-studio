@@ -12,9 +12,13 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
 ## Features
 
 - **Waterfall view** — notes fall vertically toward an 88-key on-screen piano.
-  A held key grows anchored to the keyboard; on release the note freezes at its
-  real duration, drifts with the flow clock, and fades in the top 25% of the
-  view.
+  All notes — recorded and live — share a single renderer and the same
+  lifecycle: a held key grows anchored to the keyboard; on release the note
+  freezes at its real duration, drifts with the flow clock, and fades in the
+  top 25% of the view. Recorded notes are synthesized onto that lifecycle
+  against the playhead (open while the playhead is inside them, closed after),
+  keep their own color, and the waterfall stays clean while the transport is
+  stopped.
 - **Transport** — play, stop, and record, with tempo and time signature
   controls. Playback always starts from the beginning of the recorded material.
 - **Metronome** — audible accent/click pulses (`expo-audio`), with a per-measure accent (1–8 beats); off by default; falls back to visual-only if audio is unavailable. Rendered by the dedicated `Metronome` component.
@@ -160,6 +164,18 @@ Notes:
   `colors.ts`, `liveNotes.ts`, `tempo.ts`). `liveNotes` is exposed to React via
   `useSyncExternalStore`. The note's time-based minimum length is a
   display-only floor and never affects the stored or sounded duration.
+- **One renderer for all notes** (`src/components/Waterfall.tsx`): recorded
+  and live notes both go through `liveNoteGeometry`. Committed notes are
+  synthesized as live notes on the transport time base (`flowTick = position`)
+  — open (anchored, growing) while the playhead is inside the note, closed
+  (frozen, rising) after — with the region's color. The waterfall is clean
+  when the transport is stopped, and the in-progress take is drawn only
+  through the `liveNotes` store: `useStudio.recordedNotes` holds committed
+  regions only, so nothing renders twice.
+- **Animation runs at ~60 fps**: the transport/UI clock in `useStudio` ticks
+  every 16 ms (previously 33 ms); the waterfall's own animation clock was
+  already 16 ms. Recording timestamps do not ride this clock — `currentTick()`
+  uses `performance.now()`.
 
 ## Tests
 
