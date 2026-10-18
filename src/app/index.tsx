@@ -42,7 +42,7 @@ export default function Index() {
   const recordedNotes = studio.recordedNotes;
 
   return (
-    <SafeAreaView className="relative flex-1 bg-zinc-800">
+    <SafeAreaView className="relative flex-1 bg-zinc-900">
       {/* Header */}
       <View className="border-b border-zinc-800 px-3 py-2">
         <Text className="text-lg font-bold text-white">Piano Studio</Text>
