@@ -250,17 +250,25 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
 
   const record = useCallback(() => {
     const t = transport;
+    // Like play, recording always starts from the beginning: existing takes are
+    // replayed as reference while the new one is captured.
     player.cancel();
+    t.seek(0);
+    const notes = regionsRef.current.flatMap((region) => region.notes);
+    if (notes.length > 0) {
+      player.schedule(offsetNotesForPlayback(notes, 0), t.tempo, t.ppq, sendVia);
+    }
     sessionRef.current = new RecordingSession({
-      startTick: t.position,
+      startTick: 0,
       tempo: t.tempo,
       ppq: t.ppq,
     });
     setLiveNotes([]);
     t.record();
     reanchor();
+    setPosition(0);
     setTransportState(t.state);
-  }, [player, reanchor, transport]);
+  }, [player, reanchor, sendVia, transport]);
 
   const stop = useCallback(() => {
     const t = transport;

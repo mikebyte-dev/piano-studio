@@ -32,7 +32,10 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
   replace semantics are implemented in the pure core (`commitModes`).
   Commit goes through the pure `commitTake` (`src/core/recording/commitTake.ts`),
   so a region starts where the session started and its notes share the region's
-  absolute-tick coordinates.
+  absolute-tick coordinates. Recording a new take **restarts from the beginning**
+  and plays back the previously committed takes via **MIDI out as a reference**
+  while the new one is captured (DAW-style overdub reference); starting or
+  stopping playback sends all-notes-off so nothing hangs.
 - **Region editing** — recolor and delete regions from the track strip.
   Pure move/trim/resize operations exist in the core (`regionEditing`), but
   they are not exposed on-screen yet.
@@ -187,7 +190,7 @@ npx jest
 
 The suite covers the pure core only — there are no component tests; testable
 behavior is extracted into pure modules (`src/core/**`). Test-first is the
-convention for new behavior. Current status: **11 test suites, 230 tests, all
+convention for new behavior. Current status: **12 test suites, 232 tests, all
 passing**.
 
 ## Known limitations
