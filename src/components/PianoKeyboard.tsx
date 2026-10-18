@@ -63,25 +63,33 @@ export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyDown, onKeyUp 
   };
 
   return (
-    <View onLayout={onLayout} className="relative h-36 w-full overflow-hidden rounded-md">
+    <View
+      onLayout={onLayout}
+      className="relative h-44 w-full overflow-visible rounded-md"
+      style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 }}
+    >
       <View className="absolute inset-0 flex-row">
         {whitePitches.map((pitch) => {
           const state = highlight(pitch);
           const background =
             state === 'active'
-              ? 'bg-amber-400'
+              ? 'bg-green-600'
               : state === 'sustained'
-                ? 'bg-violet-400'
-                : 'bg-white';
+                ? 'bg-[#c9c2b4]'
+                : 'bg-[#c9c2b4]';
           return (
             <Pressable
               key={pitch}
               onPressIn={() => onKeyDown?.(pitch)}
               onPressOut={() => onKeyUp?.(pitch)}
-              className={`flex-1 justify-end border-r border-zinc-300 pb-1 ${background}`}
+              className={`relative flex-1 justify-end border-r border-zinc-700/60 pb-1 ${background}`}
+              style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 3, elevation: 2 }}
             >
+              {state === 'sustained' ? (
+                <View className="absolute inset-0 bg-violet-500/30" pointerEvents="none" />
+              ) : null}
               {pitch % 12 === 0 ? (
-                <Text className="text-center text-[8px] text-zinc-500">C{Math.floor(pitch / 12) - 1}</Text>
+                <Text className="text-center text-[10px] font-semibold text-zinc-600">C{Math.floor(pitch / 12) - 1}</Text>
               ) : null}
             </Pressable>
           );
@@ -92,18 +100,30 @@ export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyDown, onKeyUp 
         const state = highlight(pitch);
         const background =
           state === 'active'
-            ? 'bg-amber-500'
+            ? 'bg-green-700'
             : state === 'sustained'
-              ? 'bg-violet-600'
+              ? 'bg-zinc-900'
               : 'bg-zinc-900';
         return (
           <Pressable
             key={pitch}
             onPressIn={() => onKeyDown?.(pitch)}
             onPressOut={() => onKeyUp?.(pitch)}
-            style={{ left, width: blackKeyWidth }}
-            className={`absolute top-0 h-[60%] rounded-b-sm ${background}`}
-          />
+            style={{
+              left,
+              width: blackKeyWidth,
+              shadowColor: '#000',
+              shadowOffset: state !== 'active' ? { width: 0, height: 2 } : { width: 0, height: 0 },
+              shadowOpacity: state !== 'active' ? 0.4 : 0,
+              shadowRadius: state !== 'active' ? 2 : 0,
+              elevation: state !== 'active' ? 3 : 0,
+            }}
+            className={`absolute top-0 h-[60%] rounded-b-md border-t border-b border-t-white/10 border-b-zinc-950/40 ${background}`}
+          >
+            {state === 'sustained' ? (
+              <View className="absolute inset-0 bg-violet-700/30 rounded-b-md" pointerEvents="none" />
+            ) : null}
+          </Pressable>
         );
       })}
     </View>

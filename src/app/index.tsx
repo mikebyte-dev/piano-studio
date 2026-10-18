@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Metronome } from '../components/Metronome';
 import { PianoKeyboard } from '../components/PianoKeyboard';
+import { SustainPedal } from '../components/SustainPedal';
 import { Waterfall } from '../components/Waterfall';
 import { useStudio } from '../hooks/useStudio';
 
@@ -196,7 +197,7 @@ export default function Index() {
       <View className="h-[3px] w-full bg-red-600" />
 
       {/* Piano keyboard (keys highlight in every mode) */}
-      <View className="h-36">
+      <View className="h-44">
         <PianoKeyboard
           activeNotes={studio.activeNotes}
           sustainedNotes={studio.sustainedNotes}
@@ -205,9 +206,10 @@ export default function Index() {
         />
       </View>
 
-      <Text className="px-3 py-1 text-xs text-zinc-500">
-        {studio.sustainDown ? 'Sustain: down' : 'Sustain: up'} · notes {recordedNotes.length}
-      </Text>
+      <View className="flex-row items-center gap-3 px-3 py-1">
+        <SustainPedal down={studio.sustainDown} />
+        <Text className="text-xs text-zinc-500">notes {recordedNotes.length}</Text>
+      </View>
     </SafeAreaView>
   );
 }

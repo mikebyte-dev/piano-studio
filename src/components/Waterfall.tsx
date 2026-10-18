@@ -223,12 +223,12 @@ export function Waterfall({
           borderTopColor: lighten(fill, 0.35),
           borderBottomWidth: 1.5,
           borderBottomColor: darken(fill, 0.35),
-          borderRadius: 3,
+          borderRadius: 4,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.45,
-          shadowRadius: 3,
-          elevation: 3,
+          shadowOpacity: 0.5,
+          shadowRadius: 4,
+          elevation: 4,
           opacity,
         }}
       />
@@ -268,12 +268,12 @@ export function Waterfall({
           borderTopColor: lighten(fill, 0.35),
           borderBottomWidth: 1.5,
           borderBottomColor: darken(fill, 0.35),
-          borderRadius: 3,
+          borderRadius: 4,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.45,
-          shadowRadius: 3,
-          elevation: 3,
+          shadowOpacity: 0.5,
+          shadowRadius: 4,
+          elevation: 4,
           opacity,
         }}
       />
