@@ -2,12 +2,13 @@
   "expo": {
     "name": "piano-studio",
     "slug": "piano-studio",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "0.9.0",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "pianostudio",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.mikebytedev.pianostudio",
       "icon": "./assets/expo.icon"
     },
     "android": {
@@ -18,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.pianostudio"
+      "package": "com.mikebytedev.pianostudio"
     },
     "web": {
       "output": "static",

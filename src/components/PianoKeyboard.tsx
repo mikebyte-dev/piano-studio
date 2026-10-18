@@ -65,7 +65,7 @@ export function PianoKeyboard({ activeNotes, sustainedNotes, onKeyDown, onKeyUp 
   return (
     <View
       onLayout={onLayout}
-      className="relative h-44 w-full overflow-visible rounded-md"
+      className="relative h-full w-full overflow-visible rounded-md"
       style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 }}
     >
       <View className="absolute inset-0 flex-row">

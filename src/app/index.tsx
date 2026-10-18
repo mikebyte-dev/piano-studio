@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Metronome } from '../components/Metronome';
@@ -27,6 +27,11 @@ export default function Index() {
   const { devices, isOpen, connect } = studio;
   const [layout, setLayout] = useState({ width: 0, height: 0 });
   const [paletteRegionId, setPaletteRegionId] = useState<string | null>(null);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isLandscape = windowWidth > windowHeight;
+  const keyboardHeight = isLandscape
+    ? Math.max(96, Math.round(windowHeight * 0.28))
+    : Math.max(144, Math.round(windowHeight * 0.18));
   const autoConnectedRef = useRef(false);
 
   // Auto-connect when a single device is available.
@@ -49,7 +54,7 @@ export default function Index() {
       </View>
 
       {/* Transport bar: devices · Play/Rec · Metronome */}
-      <View className="flex-row items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2">
+      <View className="flex-row flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2">
         {/* Device menu */}
         <View className="flex-row items-center gap-1">
           {studio.devices.length > 1 ? (
@@ -113,7 +118,7 @@ export default function Index() {
 
       {/* Recorded tracks */}
       {studio.regions.length > 0 ? (
-        <View className="h-11">
+        <View style={{ height: isLandscape ? 36 : 44 }}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -202,7 +207,7 @@ export default function Index() {
       </View>
 
       {/* Piano keyboard (keys highlight in every mode) */}
-      <View className="h-44 mb-3">
+      <View style={{ height: keyboardHeight }} className="mb-3">
         <PianoKeyboard
           activeNotes={studio.activeNotes}
           sustainedNotes={studio.sustainedNotes}

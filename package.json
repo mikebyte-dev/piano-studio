@@ -1,7 +1,7 @@
 {
   "name": "piano-studio",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "dependencies": {
     "@expo/ui": "~57.0.25",
     "@testing-library/react-native": "^14.1.0",
