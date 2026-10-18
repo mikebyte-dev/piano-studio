@@ -26,6 +26,9 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
 - **Recording takes** — each finished take is committed as an independent
   **region** (with its own color); empty takes create no region. Overdub and
   replace semantics are implemented in the pure core (`commitModes`).
+  Commit goes through the pure `commitTake` (`src/core/recording/commitTake.ts`),
+  so a region starts where the session started and its notes share the region's
+  absolute-tick coordinates.
 - **Region editing** — recolor and delete regions from the track strip.
   Pure move/trim/resize operations exist in the core (`regionEditing`), but
   they are not exposed on-screen yet.
@@ -57,14 +60,12 @@ src/
     Waterfall.tsx         Synthesia-style falling-notes view
     PianoKeyboard.tsx     88-key on-screen keyboard (MIDI 21–108)
     PianoRoll.tsx         Classic piano roll (kept in the repo, not the main view)
-    TransportBar.tsx      Transport controls (defined, not wired into the main screen)
     Metronome.tsx         Metronome UI control (toggle, tempo, time signature)
-    RegionTools.tsx       Region editing controls (defined, not wired into the main screen)
     SustainPedal.tsx      Sustain (CC 64) indicator
   core/                   Framework-free, pure, testable logic
     domain/types.ts       Note, Region, Track, Project, PPQ/tempo defaults
     midi/                 MidiAdapter interface + FakeMidiAdapter + MidiAndroidAdapter + message helpers
-    recording/            Transport, RecordingSession, commitModes, regionEditing, MidiOutPlayer
+    recording/            Transport, RecordingSession, commitTake, commitModes, regionEditing, MidiOutPlayer
     waterfall/            noteGeometry, colors, liveNotes, tempo (pure, tested)
   hooks/
     useMidi.ts            React binding over a MidiAdapter (devices, live notes, sustain)
@@ -170,13 +171,11 @@ npx jest
 
 The suite covers the pure core only — there are no component tests; testable
 behavior is extracted into pure modules (`src/core/**`). Test-first is the
-convention for new behavior. Current status: **10 test suites, 220 tests, all
+convention for new behavior. Current status: **11 test suites, 230 tests, all
 passing**.
 
 ## Known limitations
 
-- `TransportBar` and `RegionTools` components exist but are not wired into the
-  main screen (`index.tsx` builds its own transport and track strip).
 - Region move/trim/resize have no on-screen control yet (only recolor + delete
   on the track strip); the pure ops live in `regionEditing`.
 - `commitModes` (overdub/replace) pure functions exist and are tested, but the

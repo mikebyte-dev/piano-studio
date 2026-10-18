@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Note, Region } from '../core/domain/types';
 import type { MidiAdapter, MidiMessage } from '../core/midi/MidiAdapter';
 import { decodeMessage, noteOffBytes, noteOnBytes } from '../core/midi/messages';
+import { commitTake } from '../core/recording/commitTake';
 import { MidiOutPlayer, offsetNotesForPlayback } from '../core/recording/MidiOutPlayer';
 import {
   moveRegion,
@@ -14,8 +15,6 @@ import {
 import { RecordingSession } from '../core/recording/RecordingSession';
 import { createTransport, msToTick, type TransportState } from '../core/recording/Transport';
 import { useMidi, type UseMidiResult } from './useMidi';
-
-export type RecordMode = 'overdub' | 'replace';
 
 /** Beats-per-measure range accepted by the time-signature control. */
 const TIME_SIGNATURE_MIN = 1;
@@ -57,8 +56,6 @@ export interface UseStudioResult {
   /** Color applied to notes captured by the next recording. */
   recordingColor: string;
   setRecordingColor: (color: string) => void;
-  recordMode: RecordMode;
-  setRecordMode: (mode: RecordMode) => void;
 
   // Metronome
   /** Whether the metronome click is audible. */
@@ -87,7 +84,6 @@ export interface UseStudioResult {
   liveNotes: Note[];
   /** Every recorded note (all regions flattened) plus the in-progress take. */
   recordedNotes: Note[];
-  clearRegion: () => void;
   /** Removes the region with the given id; keeps the selection valid. */
   deleteRegion: (id: string) => void;
 
@@ -133,10 +129,10 @@ function mapSelectedRegion(
  * MIDI out and region editing. Composes `useMidi` (device + live note state)
  * with the pure core modules.
  *
- * Each finished take is committed as an independent `Region` (empty takes
- * create no region); editing actions target the selected region, defaulting to
- * the most recent one. `recordMode` is still surfaced for the UI but takes are
- * no longer merged.
+ * Each finished take is committed as an independent `Region` by the pure
+ * `commitTake` (`src/core/recording/commitTake.ts`); empty takes create no
+ * region. Editing actions target the selected region, defaulting to the most
+ * recent one.
  *
  * The metronome is not part of this hook: it lives in `useMetronome`.
  */
@@ -151,7 +147,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const [position, setPosition] = useState(0);
   const [tempo, setTempoState] = useState(transport.tempo);
   const [recordingColor, setRecordingColor] = useState('#22c55e');
-  const [recordMode, setRecordMode] = useState<RecordMode>('overdub');
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [timeSignature, setTimeSignatureState] = useState(4);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -239,27 +234,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     return () => clearInterval(timer);
   }, [transportState, transport]);
 
-  const commitTake = useCallback((incoming: Note[], rangeStart: number, rangeEnd: number) => {
-    // An empty take creates no region (and therefore no empty track).
-    if (incoming.length === 0) return;
-    void rangeStart; // multiple independent takes: no merge range needed
-    const color = recordingColorRef.current;
-    const tagged = incoming.map((n) => (n.color ? n : { ...n, color }));
-    const maxEnd = tagged.reduce((acc, n) => Math.max(acc, n.startTick + n.durationTick), 0);
-    regionCounterRef.current += 1;
-    const index = regionCounterRef.current;
-    const region: Region = {
-      id: `region-${index}`,
-      trackId: `track-${index}`,
-      startTick: 0,
-      lengthTick: Math.max(1, maxEnd, rangeEnd),
-      notes: tagged,
-      color,
-    };
-    setRegions((prev) => [...prev, region]);
-    setSelectedRegionId(region.id);
-  }, []);
-
   const play = useCallback(() => {
     const t = transport;
     // Play always starts from the beginning of the recorded take.
@@ -296,8 +270,18 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       const endTick = currentTick();
       const notes = session.stop(endTick);
       sessionRef.current = null;
-      setLiveNotes([]);
-      commitTake(notes, session.startTick, endTick);
+      // Empty take -> commitTake returns null: no region, no regionIndex consumed.
+      const region = commitTake(
+        notes,
+        session.startTick,
+        recordingColorRef.current,
+        regionCounterRef.current + 1,
+      );
+      if (region !== null) {
+        regionCounterRef.current += 1;
+        setRegions((prev) => [...prev, region]);
+        setSelectedRegionId(region.id);
+      }
     }
     t.stop();
     t.seek(0);
@@ -308,7 +292,7 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     setLiveNotes([]);
     setTransportState(t.state);
     setPosition(0);
-  }, [commitTake, currentTick, midi, player, transport]);
+  }, [currentTick, midi, player, transport]);
 
   const seek = useCallback(
     (tick: number) => {
@@ -345,16 +329,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     const n = Math.max(TIME_SIGNATURE_MIN, Math.min(TIME_SIGNATURE_MAX, Math.round(value)));
     setTimeSignatureState(n);
   }, []);
-
-  const clearRegion = useCallback(() => {
-    setRegions((prev) => {
-      if (prev.length === 0) return prev;
-      const found = selectedRegionId === null ? -1 : prev.findIndex((r) => r.id === selectedRegionId);
-      const target = found === -1 ? prev.length - 1 : found;
-      return prev.filter((_, i) => i !== target);
-    });
-    setSelectedRegionId(null);
-  }, [selectedRegionId]);
 
   const deleteRegion = useCallback(
     (id: string) => {
@@ -562,8 +536,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     ppq: transport.ppq,
     recordingColor,
     setRecordingColor,
-    recordMode,
-    setRecordMode,
 
     metronomeEnabled,
     setMetronomeEnabled,
@@ -582,7 +554,6 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     setSelectedRegionId,
     liveNotes,
     recordedNotes,
-    clearRegion,
     deleteRegion,
 
     moveRegionBy,
