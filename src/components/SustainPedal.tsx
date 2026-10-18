@@ -9,7 +9,7 @@ export interface SustainPedalProps {
 export function SustainPedal({ down }: SustainPedalProps) {
   return (
     <View
-      className={`h-7 w-12 items-center justify-center rounded-lg border ${
+      className={`h-8 px-2 items-center justify-center rounded-lg border ${
         down ? 'border-violet-500 bg-violet-700' : 'border-zinc-600 bg-zinc-800'
       }`}
       style={{
@@ -21,7 +21,7 @@ export function SustainPedal({ down }: SustainPedalProps) {
       }}
     >
       <Text className={`text-[10px] font-semibold ${down ? 'text-white' : 'text-zinc-400'}`}>
-        SUSTAIN
+        SOSTENIDO
       </Text>
     </View>
   );

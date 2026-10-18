@@ -156,7 +156,7 @@ export function PianoRoll({
 
       {allNotes.length === 0 ? (
         <View className="absolute inset-0 items-center justify-center">
-          <Text className="text-xs text-zinc-500">No notes yet — press record and play</Text>
+          <Text className="text-xs text-zinc-500">Aún no hay notas — pulsa grabar y reproducir</Text>
         </View>
       ) : null}
     </View>

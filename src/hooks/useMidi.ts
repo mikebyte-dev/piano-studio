@@ -212,7 +212,7 @@ export function useMidi(options: UseMidiOptions = {}): UseMidiResult {
       setActiveNotes(new Set());
       setSustainedNotes(new Set());
       setSustainDown(false);
-      setError(`Device disconnected: ${deviceId}`);
+      setError(`Dispositivo desconectado: ${deviceId}`);
     });
   }, [adapter]);
 

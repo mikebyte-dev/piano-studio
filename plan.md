@@ -160,6 +160,7 @@ La **Fase 0A no se ejecuta en este repo** sino en el repositorio satélite `D:\P
 ## 🔮 Futuras features (backlog)
 
 - [ ] **Mostrar/ocultar notas sostenidas por el pedal** — opción en el menú de opciones (futuro) para alternar la visibilidad visual de las notas sostenidas (teclas violeta suave y/o notas en el waterfall) sin afectar el audio/MIDI. Hoy siempre visibles. — `@buddy` (UI), sin bloqueo de otras tareas.
+- [ ] **Cambio de idioma en opciones** — añadir en el menú de opciones (futuro) la posibilidad de seleccionar el idioma de la interfaz (hoy la UI está en español). Incluir al menos español/inglés. — `@buddy` (UI) + `@writer` (textos), sin bloqueo.
 
 ## 📌 Contexto de Continuación (Para reanudar el chat)
 

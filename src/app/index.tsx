@@ -66,7 +66,7 @@ export default function Index() {
             </ScrollView>
           ) : (
             <Text className="text-xs text-zinc-400">
-              {studio.devices.length === 0 ? 'No device' : studio.devices[0]?.name}
+              {studio.devices.length === 0 ? 'Sin dispositivo' : studio.devices[0]?.name}
             </Text>
           )}
           <Pressable onPress={() => void studio.refreshDevices()} className="rounded bg-zinc-800 px-2 py-1">
@@ -81,7 +81,7 @@ export default function Index() {
             className="rounded-md bg-emerald-600 px-3 py-1.5"
           >
             <Text className="text-sm font-semibold text-white">
-              {studio.transportState === 'playing' ? 'Stop' : 'Play'}
+              {studio.transportState === 'playing' ? 'Detener' : 'Reproducir'}
             </Text>
           </Pressable>
 
@@ -90,7 +90,7 @@ export default function Index() {
             className="rounded-md bg-red-600 px-3 py-1.5"
           >
             <Text className="text-sm font-semibold text-white">
-              {studio.transportState === 'recording' ? 'Stop Rec' : 'Rec'}
+              {studio.transportState === 'recording' ? 'Det. grab.' : 'Grabar'}
             </Text>
           </Pressable>
         </View>
@@ -133,14 +133,14 @@ export default function Index() {
                       setPaletteRegionId((prev) => (prev === region.id ? null : region.id));
                     }}
                     className="flex-row items-center gap-2"
-                    accessibilityLabel={`Track ${i + 1} color options`}
+                    accessibilityLabel={`Opciones de color de pista ${i + 1}`}
                   >
                     <View
                       style={{ backgroundColor: region.color ?? region.notes[0]?.color ?? '#22c55e' }}
                       className="h-4 w-4 rounded"
                     />
                     <Text className="text-xs text-zinc-300">
-                      Track {i + 1} · {region.notes.length} notes
+                      Pista {i + 1} · {region.notes.length} notas
                     </Text>
                   </Pressable>
                   {paletteRegionId === region.id ? (
@@ -154,7 +154,7 @@ export default function Index() {
                           }}
                           style={{ backgroundColor: color }}
                           className="h-3.5 w-3.5 rounded-full border border-zinc-500"
-                          accessibilityLabel={`Set track color ${color}`}
+                          accessibilityLabel={`Establecer color de pista ${color}`}
                         />
                       ))}
                     </View>
@@ -166,7 +166,7 @@ export default function Index() {
                     }}
                     className="rounded bg-zinc-800 px-2 py-1"
                   >
-                    <Text className="text-xs text-white">Delete</Text>
+                    <Text className="text-xs text-white">Eliminar</Text>
                   </Pressable>
                 </View>
               );

@@ -45,24 +45,24 @@ export function RegionTools({ region, ppq, onMove, onTrimStart, onTrimEnd, onRes
   return (
     <View className="gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
       <View className="flex-row items-center justify-between">
-        <Text className="text-xs font-semibold text-zinc-300">Region</Text>
+        <Text className="text-xs font-semibold text-zinc-300">Región</Text>
         <Text className="text-[11px] text-zinc-500">
           {region === null
-            ? 'empty'
-            : `[${startTick}–${endTick}) · ${region.notes.length} notes`}
+            ? 'vacía'
+            : `[${startTick}–${endTick}) · ${region.notes.length} notas`}
         </Text>
       </View>
 
       <View className="flex-row flex-wrap gap-1.5">
-        <ToolButton label="◀ move" disabled={disabled} onPress={() => onMove(-bar)} />
-        <ToolButton label="move ▶" disabled={disabled} onPress={() => onMove(bar)} />
-        <ToolButton label="trim start ▶" disabled={disabled} onPress={() => onTrimStart(bar)} />
-        <ToolButton label="◀ trim start" disabled={disabled} onPress={() => onTrimStart(-bar)} />
-        <ToolButton label="trim end ◀" disabled={disabled} onPress={() => onTrimEnd(-bar)} />
-        <ToolButton label="trim end ▶" disabled={disabled} onPress={() => onTrimEnd(bar)} />
-        <ToolButton label="shorter" disabled={disabled} onPress={() => onResize(-bar)} />
-        <ToolButton label="longer" disabled={disabled} onPress={() => onResize(bar)} />
-        <ToolButton label="clear" disabled={disabled} onPress={onClear} />
+        <ToolButton label="◀ mover" disabled={disabled} onPress={() => onMove(-bar)} />
+        <ToolButton label="mover ▶" disabled={disabled} onPress={() => onMove(bar)} />
+        <ToolButton label="recortar inicio ▶" disabled={disabled} onPress={() => onTrimStart(bar)} />
+        <ToolButton label="◀ recortar inicio" disabled={disabled} onPress={() => onTrimStart(-bar)} />
+        <ToolButton label="recortar fin ◀" disabled={disabled} onPress={() => onTrimEnd(-bar)} />
+        <ToolButton label="recortar fin ▶" disabled={disabled} onPress={() => onTrimEnd(bar)} />
+        <ToolButton label="más corto" disabled={disabled} onPress={() => onResize(-bar)} />
+        <ToolButton label="más largo" disabled={disabled} onPress={() => onResize(bar)} />
+        <ToolButton label="limpiar" disabled={disabled} onPress={onClear} />
       </View>
     </View>
   );

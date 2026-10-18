@@ -92,7 +92,7 @@ export function Metronome({
       <Pressable
         onPress={toggle}
         accessibilityRole="button"
-        accessibilityLabel={enabled ? 'Disable metronome' : 'Enable metronome'}
+        accessibilityLabel={enabled ? 'Desactivar metrónomo' : 'Activar metrónomo'}
         accessibilityState={{ selected: enabled }}
         className={`rounded-md px-2 py-1.5 ${enabled ? 'bg-amber-500' : 'bg-zinc-800'}`}
       >
@@ -102,7 +102,7 @@ export function Metronome({
       <Pressable
         onPress={openMenu}
         accessibilityRole="button"
-        accessibilityLabel="Metronome options"
+        accessibilityLabel="Opciones del metrónomo"
         accessibilityState={{ expanded: menuOpen }}
         className={`rounded-md px-2 py-1.5 ${menuOpen ? 'bg-zinc-700' : 'bg-zinc-800'}`}
       >
@@ -120,7 +120,7 @@ export function Metronome({
             style={StyleSheet.absoluteFill}
             onPress={() => setMenuOpen(false)}
             accessibilityRole="button"
-            accessibilityLabel="Close metronome options"
+            accessibilityLabel="Cerrar opciones del metrónomo"
           />
           <View
             className={`absolute w-40 gap-2 rounded-md border border-zinc-700 bg-zinc-800 p-2 ${
@@ -142,7 +142,7 @@ export function Metronome({
                 <Pressable
                   onPress={() => setTimeSignature(timeSignature - 1)}
                   accessibilityRole="button"
-                  accessibilityLabel="Decrease time signature"
+                  accessibilityLabel="Disminuir compás"
                   className="rounded bg-zinc-700 px-2 py-1"
                 >
                   <Text className="text-white">▼</Text>
@@ -151,7 +151,7 @@ export function Metronome({
                 <Pressable
                   onPress={() => setTimeSignature(timeSignature + 1)}
                   accessibilityRole="button"
-                  accessibilityLabel="Increase time signature"
+                  accessibilityLabel="Aumentar compás"
                   className="rounded bg-zinc-700 px-2 py-1"
                 >
                   <Text className="text-white">▲</Text>
@@ -166,7 +166,7 @@ export function Metronome({
                   <Pressable
                     onPress={() => onTempoChange(clampTempo(tempo - TEMPO_STEP))}
                     accessibilityRole="button"
-                    accessibilityLabel="Decrease tempo"
+                    accessibilityLabel="Disminuir tempo"
                     className="rounded bg-zinc-700 px-2 py-1"
                   >
                     <Text className="text-white">▼</Text>
@@ -175,7 +175,7 @@ export function Metronome({
                   <Pressable
                     onPress={() => onTempoChange(clampTempo(tempo + TEMPO_STEP))}
                     accessibilityRole="button"
-                    accessibilityLabel="Increase tempo"
+                    accessibilityLabel="Aumentar tempo"
                     className="rounded bg-zinc-700 px-2 py-1"
                   >
                     <Text className="text-white">▲</Text>
