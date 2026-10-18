@@ -7,7 +7,7 @@ import { LIVE_VELOCITY, LiveNoteStore } from '../core/waterfall/liveNotes';
 import type { LiveNote } from '../core/waterfall/liveNotes';
 import { DEFAULT_PX_PER_QUARTER, liveNoteGeometry } from '../core/waterfall/noteGeometry';
 import { flowQuartersPerSecond } from '../core/waterfall/tempo';
-import { LOWEST_PITCH } from './PianoKeyboard';
+import { HIGHEST_PITCH, LOWEST_PITCH } from './PianoKeyboard';
 
 // Re-export the color helpers from their new home so any existing
 // `./Waterfall` / `../components` consumers keep working.
@@ -64,7 +64,7 @@ const MAX_AGE_QUARTERS = 6;
 const STATIC_TOP_MARGIN = 60;
 
 /** How often the live animation clock advances (ms). */
-const CLOCK_INTERVAL_MS = 33;
+const CLOCK_INTERVAL_MS = 16;
 /** Tempo (BPM) used for the flow speed when the caller does not provide one. */
 const DEFAULT_TEMPO = 90;
 
@@ -103,6 +103,12 @@ export function Waterfall({
   // the frames on rapid presses).
   const activeCountRef = useRef(0);
   const liveCountRef = useRef(0);
+  // Mirrors of the render-time timing inputs, read by the stable interval
+  // callback. Kept in refs so layout (height) or tempo (ppq/quartersPerSecond)
+  // changes never tear down the interval and reset the animation clock.
+  const ppqRef = useRef(ppq);
+  const heightRef = useRef(height);
+  const qpsRef = useRef(quartersPerSecond);
 
   const { subscribe, getSnapshot } = useMemo(
     () => ({
@@ -112,6 +118,24 @@ export function Waterfall({
     [store],
   );
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+
+  // Static-overview scale factor: the latest note start in the track. Memoised
+  // so the render loop does not re-scan every recorded note on each frame.
+  const maxStart = useMemo(
+    () => recordedNotes.reduce((max, n) => Math.max(max, n.startTick), 0),
+    [recordedNotes],
+  );
+
+  // Pitch -> {left, width} for the whole keyboard, rebuilt only when the
+  // viewport width changes. Lets the render functions look geometry up by pitch
+  // instead of walking the white-key run for every note.
+  const pitchGeometry = useMemo(() => {
+    const map = new Map<number, KeyGeom>();
+    for (let pitch = LOWEST_PITCH; pitch <= HIGHEST_PITCH; pitch += 1) {
+      map.set(pitch, keyGeometry(pitch, width));
+    }
+    return map;
+  }, [width]);
 
   // Reconcile the store's live notes whenever the held pitches change: open a
   // note for each newly pressed pitch, close any note whose pitch was released.
@@ -132,18 +156,23 @@ export function Waterfall({
     }
   }, [store, activeNotes, activeColor]);
 
-  // Keep the animation clock's view of the counts current. Synced after every
-  // render (no deps) rather than during render, which React forbids for refs.
+  // Keep the animation clock's view of the counts and timing inputs current.
+  // Synced after every render (no deps) rather than during render, which React
+  // forbids for refs.
   useEffect(() => {
     activeCountRef.current = activeNotes.size;
     liveCountRef.current = snapshot.notes.length;
+    ppqRef.current = ppq;
+    heightRef.current = height;
+    qpsRef.current = quartersPerSecond;
   });
 
   // Continuous animation clock: advances the store's flow clock in real time and
   // prunes live notes once they scroll off the top of the view. The interval is
   // mounted once and always running; it skips the store update (a no-op) while
-  // nothing is held and no live note remains on screen. The held/live counts are
-  // read through refs so changing them never restarts the interval.
+  // nothing is held and no live note remains on screen. The held/live counts and
+  // the timing inputs (ppq/height/quartersPerSecond) are read through refs so
+  // changing them never restarts the interval.
   useEffect(() => {
     lastMsRef.current = clockNow();
     const timer = setInterval(() => {
@@ -151,13 +180,13 @@ export function Waterfall({
       const dtMs = now - lastMsRef.current;
       lastMsRef.current = now;
       if (activeCountRef.current === 0 && liveCountRef.current === 0) return;
-      store.advance(dtMs, ppq, quartersPerSecond, height);
+      store.advance(dtMs, ppqRef.current, qpsRef.current, heightRef.current);
     }, CLOCK_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [store, ppq, height, quartersPerSecond]);
+  }, [store]);
 
   const renderRecordedNote = (note: Note, key: string) => {
-    const geom = keyGeometry(note.pitch, width);
+    const geom = pitchGeometry.get(note.pitch) ?? keyGeometry(note.pitch, width);
     let bottom: number;
     let h: number;
     let opacity: number;
@@ -170,7 +199,6 @@ export function Waterfall({
     } else {
       // Static overview: fit the whole phrase between the bottom edge and a
       // small top margin so recorded tracks stay permanently visible.
-      const maxStart = recordedNotes.reduce((max, n) => Math.max(max, n.startTick), 0);
       const pxPerTick = maxStart > 0 ? (height - STATIC_TOP_MARGIN) / maxStart : 1;
       bottom = note.startTick * pxPerTick;
       h = Math.max(4, note.durationTick * pxPerTick);
@@ -208,7 +236,7 @@ export function Waterfall({
   };
 
   const renderLiveNote = (note: LiveNote) => {
-    const geom = keyGeometry(note.pitch, width);
+    const geom = pitchGeometry.get(note.pitch) ?? keyGeometry(note.pitch, width);
     // While held the bar is anchored to the keyboard (bottom: 0) and grows
     // upward; on release it freezes at its real length and rides the flow clock
     // up and away from the keys.

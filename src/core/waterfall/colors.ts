@@ -6,13 +6,24 @@
  * adds a vertical-gradient helper built on top of them.
  */
 
+/** Cache of {@link parseHex} results keyed by the trimmed input. */
+const parseCache = new Map<string, [number, number, number]>();
+
 /** Parses `#rrggbb` into an [r, g, b] triple, or null when the input is not valid. */
 function parseHex(hex: string): [number, number, number] | null {
   if (typeof hex !== 'string') return null;
-  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  const key = hex.trim();
+  // Memoise valid parses: `shadeByPosition`/`lighten`/`darken` re-parse the same
+  // base color once per rendered note, so caching the (pure) result avoids
+  // re-running the regex/parse for every note. Invalid inputs are not cached.
+  const cached = parseCache.get(key);
+  if (cached) return cached;
+  const match = /^#([0-9a-f]{6})$/i.exec(key);
   if (!match) return null;
   const value = parseInt(match[1], 16);
-  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+  const rgb: [number, number, number] = [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+  parseCache.set(key, rgb);
+  return rgb;
 }
 
 /** Formats clamped 0..255 channels back into `#rrggbb`. */

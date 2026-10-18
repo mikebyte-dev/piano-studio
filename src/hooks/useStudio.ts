@@ -166,6 +166,11 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   const regionCounterRef = useRef(0);
   const recordingColorRef = useRef<string>(recordingColor);
   const sendMessageRef = useRef(midi.sendMessage);
+  // Reference count of currently-held on-screen pitches. Overlapping presses on
+  // the same pitch (re-press before release, duplicated pointer events) must not
+  // release the note until the last press has ended, so `stopNote` only drops the
+  // pitch from `localPressed` once its count returns to zero.
+  const pressCountRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     regionsRef.current = regions;
@@ -300,6 +305,7 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
     player.cancel();
     midi.resetNotes();
     setLocalPressed(new Set());
+    pressCountRef.current.clear();
     setLiveNotes([]);
     setTransportState(t.state);
     setPosition(0);
@@ -460,6 +466,9 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
       if (session !== null) {
         session.onNoteOn(pitch, velocity, currentTick(), recordingColorRef.current);
       }
+      // Reference-count the press so an overlapping release on the same pitch
+      // cannot drop it from `localPressed` while another press is still active.
+      pressCountRef.current.set(pitch, (pressCountRef.current.get(pitch) ?? 0) + 1);
       // Always create a new Set (idempotent add) so every press yields a
       // state update, even when the pitch was already held.
       setLocalPressed((prev) => {
@@ -474,6 +483,17 @@ export function useStudio(options: UseStudioOptions = {}): UseStudioResult {
   /** Releases a note previously pressed with `startNote`. */
   const stopNote = useCallback(
     (pitch: number) => {
+      // Decrement the press count (floor at 0). A pitch still held by another
+      // press stays in `localPressed` and fires no release side effects; only
+      // the last release actually stops the note.
+      const remaining = Math.max(0, (pressCountRef.current.get(pitch) ?? 0) - 1);
+      if (remaining > 0) {
+        pressCountRef.current.set(pitch, remaining);
+        return;
+      }
+      pressCountRef.current.delete(pitch);
+
+      // Last press released: now perform the real note-off side effects.
       const existing = tapTimersRef.current.get(pitch);
       if (existing) {
         clearTimeout(existing);

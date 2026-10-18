@@ -44,7 +44,7 @@ vision is in [`docs/vision.md`](docs/vision.md); the working plan is in
 | Styling | NativeWind 4 (Tailwind CSS 3) |
 | Animation / gestures | `react-native-reanimated` 4, `react-native-gesture-handler` |
 | Audio | `expo-audio` (metronome) |
-| MIDI | `midi-android` (local tarball) behind a `MidiAdapter` interface |
+| MIDI | First-party `midi-android` module (our own code, local tarball) behind a `MidiAdapter` interface |
 | Tests | `jest-expo` + `@testing-library/react-native` |
 | Lint | ESLint 9 / `eslint-config-expo` |
 
@@ -120,9 +120,10 @@ MIDI is isolated behind the `MidiAdapter` interface (`src/core/midi/MidiAdapter.
 - **`FakeMidiAdapter`** — an in-memory adapter for tests and hardware-free
   development. Devices are settable, sent messages are captured, and inbound
   messages are scripted. It lets the whole core and UI run without hardware.
-- **`MidiAndroidAdapter`** — the real adapter, backed by the `midi-android`
-  native module (Android's `android.media.midi` on device, the Web MIDI API on
-  web). It is a thin translation layer into the same interface.
+- **`MidiAndroidAdapter`** — the real adapter, backed by our own **first-party
+  `midi-android`** native module (Android's `android.media.midi` on device, the
+  Web MIDI API on web). It is a thin translation layer into the same interface.
+  This module is our own code — not a third-party or MIT-licensed dependency.
 
 `useMidi` owns device enumeration, connection state, and live note/sustain
 state; `useStudio` layers the transport, recording, and playback on top.
@@ -132,9 +133,12 @@ Notes:
 - **MIDI does not work in Expo Go.** The app uses `expo-dev-client`, so it must
   be run as a development build (`npx expo run:android` locally, or
   `eas build --profile development`).
-- The `midi-android` module is consumed from a local tarball
-  (`midi-android-0.1.0.tgz`, `file:` dependency) and is developed as a separate
-  satellite project.
+- The `midi-android` module is **first-party** — our own code, developed in a
+  separate satellite project, consumed here from a local tarball
+  (`midi-android-0.1.0.tgz`, `file:` dependency). It is not a third-party or
+  MIT-licensed dependency.
+- The satellite repository/package name `midi-android` is **pending rename**;
+  the current name is provisional.
 - The physical keyboard connects over USB. Opening a device enables both input
   and output on ports `0/0`.
 
