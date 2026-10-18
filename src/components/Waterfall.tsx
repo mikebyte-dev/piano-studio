@@ -297,8 +297,30 @@ export function Waterfall({
     return true;
   });
 
+  // C notes (octave boundaries) within the keyboard range, used as vertical
+  // reference lines behind the notes.
+  const octavePitches = [24, 36, 48, 60, 72, 84, 96, 108];
+
   return (
     <View style={{ width, height, position: 'relative', overflow: 'hidden' }}>
+      {octavePitches.map((pitch) => {
+        const geom = pitchGeometry.get(pitch) ?? keyGeometry(pitch, width);
+        return (
+          <View
+            key={`oct-${pitch}`}
+            style={{
+              position: 'absolute',
+              left: geom.left,
+              top: 0,
+              width: 1,
+              height,
+              backgroundColor: '#18181b',
+              opacity: 0.9,
+            }}
+            pointerEvents="none"
+          />
+        );
+      })}
       {visibleRecorded.map((n, i) => renderRecordedNote(n, `r-${n.id}-${i}`))}
       {visibleLive.map(renderLiveNote)}
     </View>
